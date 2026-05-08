@@ -1,7 +1,7 @@
 import {Router} from 'express'
-import { registroEstudiante, confirmarMailEstudiante, comprobarTokenPasswordEstudiante, recuperarPasswordEstudiante, crearNuevoPasswordEstudiante, loginEstudiante, perfilEstudiante, actualizarPerfilEstudiante, actualizarPasswordEstudiante, crearPublicacion, unirseARedComunitaria, listarPublicaciones, listarRedesDelEstudiante, listarPublicacionesPorRed, obtenerRedesComunitarias, publicarArticulo, listarArticulosPorRed, eliminarArticulo, actualizarArticulo, actualizarPublicacion, eliminarPublicacion, comprarArticulo, listarTodosArticulos, obtenerEstudiantes } 
+import { registroEstudiante, confirmarMailEstudiante, comprobarTokenPasswordEstudiante, recuperarPasswordEstudiante, crearNuevoPasswordEstudiante, perfilEstudiante, actualizarPerfilEstudiante, actualizarPasswordEstudiante, crearPublicacion, unirseARedComunitaria, listarPublicaciones, listarRedesDelEstudiante, listarPublicacionesPorRed, obtenerRedesComunitarias, obtenerRedesExplorar, publicarArticulo, listarArticulosPorRed, eliminarArticulo, actualizarArticulo, actualizarPublicacion, eliminarPublicacion, comprarArticulo, listarTodosArticulos, obtenerEstudiantes } 
 from '../controllers/estudiantesController.js'
-import { verificarTokenEstudiante } from '../middlewares/JWTEstudiante.js'
+import { verifyToken } from '../middlewares/auth.js'
 
 const router = Router()
 
@@ -11,31 +11,33 @@ router.get('/confirmar/:token', confirmarMailEstudiante)
 router.post('/recuperar-password-e', recuperarPasswordEstudiante)
 router.get('/recuperar-password-e/:token', comprobarTokenPasswordEstudiante)
 router.post('/nuevo-password-e/:token', crearNuevoPasswordEstudiante)
-router.post('/login-estudiante', loginEstudiante)
-router.get('/perfil-estudiante', verificarTokenEstudiante, perfilEstudiante)
-router.put('/estudiante/:id', verificarTokenEstudiante, actualizarPerfilEstudiante)
-router.put('/estudiante/actualizarpassword/:id', verificarTokenEstudiante, actualizarPasswordEstudiante)
+router.get('/perfil-estudiante', verifyToken, perfilEstudiante)
+router.put('/estudiante/:id', verifyToken, actualizarPerfilEstudiante)
+router.put('/estudiante/actualizarpassword/:id', verifyToken, actualizarPasswordEstudiante)
 
 //Rutas para la gestión de publicaciones
-router.post('/estudiantes/publicaciones', verificarTokenEstudiante, crearPublicacion)
-router.get('/publicaciones/listar', verificarTokenEstudiante, listarPublicaciones)
-router.put('/publicaciones/actualizar/:id', verificarTokenEstudiante, actualizarPublicacion)
-router.delete('/publicaciones/eliminar/:id', verificarTokenEstudiante, eliminarPublicacion)
-router.get('/publicaciones/red/:redId', verificarTokenEstudiante, listarPublicacionesPorRed)
-router.post('/publicaciones/articulos', verificarTokenEstudiante, publicarArticulo)
-router.get('/publicaciones/articulos/listar', verificarTokenEstudiante, listarTodosArticulos)
-router.get('/publicaciones/articulos/listar/:redId', verificarTokenEstudiante, listarArticulosPorRed)
-router.put('/publicaciones/articulo/actualizar/:id', verificarTokenEstudiante, actualizarArticulo)
-router.delete('/publicaciones/articulo/eliminar/:id', verificarTokenEstudiante, eliminarArticulo)
-router.post('/articulo/comprar', verificarTokenEstudiante, comprarArticulo)
+router.post('/estudiantes/publicaciones', verifyToken, crearPublicacion)
+router.get('/publicaciones/listar', verifyToken, listarPublicaciones)
+router.put('/publicaciones/actualizar/:id', verifyToken, actualizarPublicacion)
+router.delete('/publicaciones/eliminar/:id', verifyToken, eliminarPublicacion)
+router.get('/publicaciones/red/:redId', verifyToken, listarPublicacionesPorRed)
+router.post('/publicaciones/articulos', verifyToken, publicarArticulo)
+router.get('/publicaciones/articulos/listar', verifyToken, listarTodosArticulos)
+router.get('/publicaciones/articulos/listar/:redId', verifyToken, listarArticulosPorRed)
+router.put('/publicaciones/articulo/actualizar/:id', verifyToken, actualizarArticulo)
+router.delete('/publicaciones/articulo/eliminar/:id', verifyToken, eliminarArticulo)
+router.post('/articulo/comprar', verifyToken, comprarArticulo)
 
 //Rutas para la getsión de redes comunitarias
-router.get('/redes/listar', verificarTokenEstudiante, obtenerRedesComunitarias)
-router.get('/estudiantes/listar/redes', verificarTokenEstudiante, listarRedesDelEstudiante)
-router.post('/estudiantes/unirse/red', verificarTokenEstudiante, unirseARedComunitaria)
+router.get('/redes/listar', verifyToken, obtenerRedesComunitarias)
+//
+router.get('/redes/explorar', obtenerRedesExplorar)
+//
+router.get('/estudiantes/listar/redes', verifyToken, listarRedesDelEstudiante)
+router.post('/estudiantes/unirse/red', verifyToken, unirseARedComunitaria)
 
 //Rutas para la gestión de mensajes
-router.get('/cargar/estudiantes', verificarTokenEstudiante, obtenerEstudiantes)
+router.get('/cargar/estudiantes', verifyToken, obtenerEstudiantes)
 
 
 export default router

@@ -7,140 +7,271 @@ import fs from "fs-extra"
 import AdminRed from '../models/adminRedes.js'
 import { sendMailToRecoveryPassword, sendMailToRegister, enviarCorreoNuevoAdmin } from "../config/nodemailer.js"
 import { crearTokenJWT } from "../middlewares/authSuperAdmin.js"
+import { body, param, validationResult } from "express-validator"
 
 //Controladores para la gestión de la cuenta
 const login = async (req, res) => {
-  const { email, password } = req.body
-  if (!email || !password) {
-    return res.status(400).json({ msg: "Lo sentimos, debes llenar todos los campos" })
-  }
-  const superAdminBDD = await SuperAdmin.findOne({ email }).select("-__v -token -updatedAt -createdAt")
-  if (!superAdminBDD) {
-    return res.status(404).json({ msg: "Lo sentimos, el usuario no se encuentra registrado" })
-  }
-  if (superAdminBDD.confirmEmail === false) {
-    return res.status(403).json({ msg: "Lo sentimos, debe verificar su cuenta" })
-  }
-  const verificarPassword = await superAdminBDD.matchPassword(password)
-  if (!verificarPassword) {
-    return res.status(401).json({ msg: "Lo sentimos, la contraseña no es la correcto" })
-  }
-  const { nombre, apellido, celular, _id, rol } = superAdminBDD
-  const token = crearTokenJWT(superAdminBDD._id, superAdminBDD.rol)
+  await body("email")
+    .exists().withMessage("El email es obligatorio")
+    .bail()
+    .isString().withMessage("El email debe ser un String (texto)")
+    .bail()
+    .isEmail().withMessage("El email no tiene un formato válido")
+    .run(req),
 
-  res.status(200).json({
-    token,
-    rol,
-    nombre,
-    apellido,
-    celular,
-    _id,
-    email: superAdminBDD.email
-  })
+    await body("password")
+      .exists().withMessage("La contraseña es obligatoria")
+      .bail()
+      .isString().withMessage("La contraseña debe ser un String (texto)")
+      .bail()
+      .notEmpty().withMessage("La contraseña no puede estar vacía")
+      .run(req)
+
+  const errors = validationResult(req)
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() })
+  }
+
+  try {
+    const { email, password } = req.body
+
+    const superAdminBDD = await SuperAdmin.findOne({ email })
+      .select("-__v -token -updatedAt -createdAt")
+
+    if (!superAdminBDD) {
+      return res.status(404).json({ msg: "Lo sentimos, el usuario no se encuentra registrado" })
+    }
+
+    if (superAdminBDD.confirmEmail === false) {
+      return res.status(403).json({ msg: "Lo sentimos, debe verificar su cuenta" })
+    }
+
+    const verificarPassword = await superAdminBDD.matchPassword(password)
+    if (!verificarPassword) {
+      return res.status(401).json({ msg: "Lo sentimos, la contraseña no es correcta" })
+    }
+
+    const { nombre, apellido, celular, _id, rol } = superAdminBDD
+    const token = crearTokenJWT(superAdminBDD._id, superAdminBDD.rol)
+
+    res.status(200).json({
+      token,
+      rol,
+      nombre,
+      apellido,
+      celular,
+      _id,
+      email: superAdminBDD.email
+    })
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({ msg: "Error en el servidor" })
+  }
 }
 
 const recuperarPassword = async (req, res) => {
-  const { email } = req.body
-  if (Object.values(req.body).includes("")) {
-    return res.status(404).json({ msg: "Lo sentimos, debes llenar todos los campos" })
+  await body("email")
+    .exists().withMessage("El email es obligatorio")
+    .bail()
+    .isString().withMessage("El email debe ser un String (texto)")
+    .bail()
+    .notEmpty().withMessage("El email no puede estar vacío")
+    .bail()
+    .isEmail().withMessage("El email no tiene un formato válido")
+    .run(req)
+
+  const errors = validationResult(req)
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() })
   }
 
-  const superAdminBDD = await SuperAdmin.findOne({ email })
-  if (!superAdminBDD) {
-    return res.status(404).json({ msg: "Lo sentimos, el usuario no se encuentra registrado" })
+  try {
+    const { email } = req.body;
+
+    const superAdminBDD = await SuperAdmin.findOne({ email })
+    if (!superAdminBDD) {
+      return res.status(404).json({ msg: "Lo sentimos, el usuario no se encuentra registrado" })
+    }
+
+    const token = superAdminBDD.crearToken()
+    superAdminBDD.token = token
+
+    await sendMailToRecoveryPassword(email, token)
+    await superAdminBDD.save()
+
+    res.status(200).json({ msg: "Revisa tu correo electrónico para reestablecer tu cuenta" })
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({ msg: "Error en el servidor" })
   }
-
-  const token = superAdminBDD.crearToken()
-  superAdminBDD.token = token
-
-  await sendMailToRecoveryPassword(email, token)
-  await superAdminBDD.save()
-
-  res.status(200).json({ msg: "Revisa tu correo electrónico para reestablecer tu cuenta" })
 }
 
-const comprobarTokenPasword = async (req, res) => {
-  const { token } = req.params
+const comprobarTokenPassword = async (req, res) => {
+  await param("token")
+    .exists().withMessage("El token es obligatorio")
+    .bail()
+    .isString().withMessage("El token debe ser un String (texto)")
+    .bail()
+    .notEmpty().withMessage("El token no puede estar vacío")
+    .run(req)
 
-  if (!token) {
-    return res.status(404).json({ msg: "Lo sentimos, no se puede validar la cuenta" })
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() })
   }
 
-  const superAdminBDD = await SuperAdmin.findOne({ token })
-  if (!superAdminBDD || superAdminBDD.token !== token) {
-    return res.status(404).json({ msg: "Lo sentimos, no se puede validar la cuenta" })
-  }
+  try {
+    const { token } = req.params
 
-  res.status(200).json({ msg: "Token confirmado, ya puedes crear tu nueva contraseña" })
+    const superAdminBDD = await SuperAdmin.findOne({ token })
+    if (!superAdminBDD || superAdminBDD.token !== token) {
+      return res.status(404).json({ msg: "Lo sentimos, no se puede validar la cuenta" })
+    }
+
+    res.status(200).json({ msg: "Token confirmado, ya puedes crear tu nueva contraseña" })
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({ msg: "Error en el servidor" })
+  }
 }
 
 const crearNuevoPassword = async (req, res) => {
-  const { password, confirmpassword } = req.body
-  const { token } = req.params
+  await body("password")
+    .exists().withMessage("La contraseña es obligatoria")
+    .bail()
+    .isString().withMessage("La contraseña debe ser un String (texto)")
+    .bail()
+    .notEmpty().withMessage("La contraseña no puede estar vacía")
+    .bail()
+    .isLength({ min: 8 }).withMessage("La contraseña debe tener al menos 8 caracteres")
+    .run(req),
 
-  if (Object.values(req.body).includes("")) {
-    return res.status(404).json({ msg: "Lo sentimos, debes llenar todos los campos" })
+    await body("confirmpassword")
+      .exists().withMessage("Debes confirmar la contraseña")
+      .bail()
+      .isString().withMessage("La confirmación debe ser un String (texto)")
+      .bail()
+      .notEmpty().withMessage("La confirmación no puede estar vacía")
+      .run(req),
+
+    await param("token")
+      .exists().withMessage("El token es obligatorio")
+      .bail()
+      .isString().withMessage("El token debe ser un String (texto)")
+      .bail()
+      .notEmpty().withMessage("El token no puede estar vacío")
+      .run(req)
+
+  const errors = validationResult(req)
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() })
   }
 
-  if (password !== confirmpassword) {
-    return res.status(404).json({ msg: "Lo sentimos, los passwords no coinciden" })
+  try {
+    const { password, confirmpassword } = req.body  
+    const { token } = req.params
+
+    if (Object.values(req.body).includes("")) {
+      return res.status(404).json({ msg: "Lo sentimos, debes llenar todos los campos" })
+    }
+
+    if (password !== confirmpassword) {
+      return res.status(404).json({ msg: "Lo sentimos, los contraseñas no coinciden" })
+    }
+
+    const superAdminBDD = await SuperAdmin.findOne({ token })
+    if (!superAdminBDD || superAdminBDD.token !== token) {
+      return res.status(404).json({ msg: "Lo sentimos, no se puede validar la cuenta" })
+    }
+
+    superAdminBDD.token = null
+    superAdminBDD.password = await superAdminBDD.encrypPassword(password)
+
+    await superAdminBDD.save()
+
+    res.status(200).json({ msg: "Felicitaciones, ya puedes iniciar sesión con tu nueva contraseña" })
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({ msg: "Error en el servidor" })
   }
-
-  const superAdminBDD = await SuperAdmin.findOne({ token })
-  if (!superAdminBDD || superAdminBDD.token !== token) {
-    return res.status(404).json({ msg: "Lo sentimos, no se puede validar la cuenta" })
-  }
-
-  superAdminBDD.token = null
-  superAdminBDD.password = await superAdminBDD.encrypPassword(password)
-
-  await superAdminBDD.save()
-
-  res.status(200).json({ msg: "Felicitaciones, ya puedes iniciar sesión con tu nueva contraseña" })
 }
 
 const actualizarPerfil = async (req, res) => {
-  const id = req.user._id;
+  await body("nombre")
+    .optional()
+    .isString().withMessage("El nombre debe ser un String (texto)")
+    .bail()
+    .matches(/^(?!.*([A-Za-zÁÉÍÓÚáéíóúÑñ])\1{2,})[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$/).withMessage("El nombre no debe contener letras repetidas excesivamente, caracteres especiales ni números")
+    .run(req)
 
-  const campos = ["nombre", "apellido", "direccion", "celular", "email"]
-  const datos = {};
+  await body("apellido")
+    .optional()
+    .isString().withMessage("El apellido debe ser un String (texto)")
+    .bail()
+    .matches(/^(?!.*([A-Za-zÁÉÍÓÚáéíóúÑñ])\1{2,})[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$/).withMessage("El apellido no debe contener letras repetidas excesivamente, caracteres especiales ni números")
+    .run(req)
 
-  for (const campo of campos) {
-    if (req.body[campo] && req.body[campo].trim() !== "") {
-      datos[campo] = req.body[campo];
+  await body("direccion")
+    .optional()
+    .isString().withMessage("La dirección debe ser un texto")
+    .bail()
+    .notEmpty().withMessage("La dirección no puede estar vacía")
+    .run(req)
+
+  await body("celular")
+    .optional()
+    .isNumeric().withMessage("El celular solo puede contener números")
+    .bail()
+    .isLength({ min: 10, max: 10 }).withMessage("El celular debe tener 10 dígitos")
+    .run(req)
+
+  await body("email")
+    .optional()
+    .isString().withMessage("El email debe ser un texto")
+    .bail()
+    .isEmail().withMessage("El email no tiene un formato válido")
+    .run(req)
+
+  const errors = validationResult(req)
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() })
+  }
+
+  try {
+    const id = req.user._id;
+
+    const campos = ["nombre", "apellido", "direccion", "celular", "email"]
+    const datos = {};
+
+    for (const campo of campos) {
+      if (req.body[campo] && req.body[campo].trim() !== "") {
+        datos[campo] = req.body[campo];
+      }
     }
-  }
 
-  if (Object.keys(datos).length === 0) {
-    return res.status(400).json({ msg: "Lo sentimos, debes llenar al menos un campo a actualizar" })
-  }
-
-  const regexSoloLetras = /^[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$/
-
-  if (datos.nombre && !regexSoloLetras.test(datos.nombre)) {
-    return res.status(400).json({ msg: "El nombre no debe contener números ni caracteres especiales" });
-  }
-
-  if (datos.apellido && !regexSoloLetras.test(datos.apellido)) {
-    return res.status(400).json({ msg: "El apellido no debe contener números ni caracteres especiales" });
-  }
-
-  const superAdminBDD = await SuperAdmin.findById(id);
-  if (!superAdminBDD) {
-    return res.status(404).json({ msg: `Lo sentimos, no existe el usuario` })
-  }
-
-  if (datos.email && superAdminBDD.email !== datos.email) {
-    const existeEmail = await SuperAdmin.findOne({ email: datos.email })
-    if (existeEmail) {
-      return res.status(400).json({ msg: `Lo sentimos, el email ya se encuentra registrado` })
+    if (Object.keys(datos).length === 0) {
+      return res.status(400).json({ msg: "Lo sentimos, debes llenar al menos un campo a actualizar" })
     }
+
+    const superAdminBDD = await SuperAdmin.findById(id);
+    if (!superAdminBDD) {
+      return res.status(404).json({ msg: `Lo sentimos, no existe el usuario` })
+    }
+
+    if (datos.email && superAdminBDD.email !== datos.email) {
+      const existeEmail = await SuperAdmin.findOne({ email: datos.email })
+      if (existeEmail) {
+        return res.status(400).json({ msg: `Lo sentimos, el email ya se encuentra registrado` })
+      }
+    }
+
+    Object.assign(superAdminBDD, datos)
+    await superAdminBDD.save()
+
+    res.status(200).json({ msg: "Datos actualizados correctamente" })
+  } catch (error) {
+
   }
-
-  Object.assign(superAdminBDD, datos)
-  await superAdminBDD.save()
-
-  res.status(200).json({ msg: "Datos actualizados correctamente" })
 }
 
 const actualizarAvatar = async (req, res) => {
@@ -180,23 +311,46 @@ const actualizarAvatar = async (req, res) => {
 }
 
 const actualizarPassword = async (req, res) => {
-  const id = req.user._id
+  await body("passwordactual")
+    .exists().withMessage("Debe completar todos los campos")
+    .bail()
+    .isString().withMessage("La contraseña actual debe ser un String (texto)")
+    .run(req),
 
-  if (!req.body.passwordactual || !req.body.passwordnuevo) {
-    return res.status(400).json({ msg: "Debe completar todos los campos" })
+  await body("passwordnuevo")
+    .exists().withMessage("Debe completar todos los campos")
+    .bail()
+    .isString().withMessage("La nueva contraseña debe ser un String (texto)")
+    .bail()
+    .isLength({ min: 8 }).withMessage("La nueva contraseña debe tener al menos 8 caracteres")
+    .run(req)
+
+  const errors = validationResult(req)
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() })
   }
 
-  const superAdminBDD = await SuperAdmin.findById(id);
-  if (!superAdminBDD) return res.status(404).json({ msg: "Lo sentimos, no existe el usuario" })
+  try {
+    const id = req.user._id
+    const { passwordactual, passwordnuevo } = req.body
 
-  const verificarPassword = await superAdminBDD.matchPassword(req.body.passwordactual);
-  if (!verificarPassword) return res.status(400).json({ msg: "La contraseña actual no es la correcta" })
+    if (!passwordactual || !passwordnuevo) return res.status(400).json({msg: "Completa los campos necesarios"})
 
-  superAdminBDD.password = await superAdminBDD.encrypPassword(req.body.passwordnuevo)
-  await superAdminBDD.save();
+    const superAdminBDD = await SuperAdmin.findById(id);
+    if (!superAdminBDD) return res.status(404).json({ msg: "Lo sentimos, no existe el usuario" })
 
-  res.status(200).json({ msg: "Password actualizado correctamente" })
-};
+    const verificarPassword = await superAdminBDD.matchPassword(passwordactual);
+    if (!verificarPassword) return res.status(400).json({ msg: "La contraseña actual no es la correcta" })
+
+    superAdminBDD.password = await superAdminBDD.encrypPassword(passwordnuevo)
+    await superAdminBDD.save();
+
+    res.status(200).json({ msg: "Contraseña actualizada correctamente" })
+  } catch (error) {
+    console.log(error)
+    res.status(500).json({ msg: "Error en el servidor" })
+  }
+}
 
 const perfil = (req, res) => {
   delete req.user.token
@@ -207,28 +361,26 @@ const perfil = (req, res) => {
   res.status(200).json(req.user)
 }
 
+// Gestión estudiantes
 const crearEstudiante = async (req, res) => {
+  await body("nombre")
+  .isString().withMessage("El apellido debe ser un String (texto)")
+  .bail()
+  .matches(/^(?!.*([A-Za-zÁÉÍÓÚáéíóúÑñ])\1{2,})[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$/).withMessage("El nombre no debe contener letras repetidas excesivamente, caracteres especiales ni números")
+  .bail()
+  .run(req)
+
+  await body("apellido")
+  .isString().withMessage("El apellido debe ser un String (texto)")
+  .bail()
+  .matches(/^(?!.*([A-Za-zÁÉÍÓÚáéíóúÑñ])\1{2,})[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$/).withMessage("El apellido no debe contener letras repetidas excesivamente, caracteres especiales ni números")
+  .run(req)
+
   try {
-    const { nombre, apellido, celular, email, password, rol, redComunitaria } = req.body;
+  const { nombre, apellido, email, password, rol, usuario, redComunitaria } = req.body;
 
     if (!nombre || !apellido || !email || !password) {
       return res.status(400).json({ msg: "Todos los campos obligatorios deben estar llenos" });
-    }
-
-    const regexSoloLetras = /^[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$/
-
-    if (!regexSoloLetras.test(nombre.trim())) {
-      return res.status(400).json({ msg: "El nombre no debe contener números ni caracteres especiales" })
-    }
-
-    if (!regexSoloLetras.test(apellido.trim())) {
-      return res.status(400).json({ msg: "El apellido no debe contener números ni caracteres especiales" })
-    }
-
-    const regexCelular = /^\d{10}$/
-    
-    if (celular && !regexCelular.test(celular)) {
-      return res.status(400).json({ msg: "El número celular debe contener exactamente 10 dígitos y sin letras ni símbolos" });
     }
 
     const existe = await Estudiante.findOne({ email });
@@ -238,12 +390,22 @@ const crearEstudiante = async (req, res) => {
 
     const redesArray = Array.isArray(redComunitaria) ? redComunitaria : [];
 
+    // Determinar usuario (username). Si no se proporciona, se genera a partir del email.
+    let usuarioFinal = usuario && usuario.trim() ? usuario.trim() : (email ? email.split('@')[0] : `user${Date.now()}`)
+    // Asegurar unicidad básica
+    let sufijo = 0
+    while (await Estudiante.findOne({ usuario: usuarioFinal })) {
+      sufijo += 1
+      usuarioFinal = `${usuarioFinal}${sufijo}`
+    }
+
     const nuevoEstudiante = new Estudiante({
       nombre,
       apellido,
-      celular,
+      usuario: usuarioFinal,
+      username: usuarioFinal,
       email,
-      rol,
+      roles: ['estudiante'],
       redComunitaria: redesArray
     });
 
@@ -273,7 +435,9 @@ const crearEstudiante = async (req, res) => {
         nombre: nuevoEstudiante.nombre,
         apellido: nuevoEstudiante.apellido,
         email: nuevoEstudiante.email,
-        rol: nuevoEstudiante.rol,
+        roles: nuevoEstudiante.roles,
+        usuario: nuevoEstudiante.usuario,
+        username: nuevoEstudiante.username,
         redComunitaria: nuevoEstudiante.redComunitaria
       }
     });
@@ -335,7 +499,9 @@ const actualizarEstudiante = async (req, res) => {
       }
     }
 
-    const cambiandoARolAdmin = estudiante.rol === 'Estudiante' && req.body.rol === 'Admin_Red';
+    // Determinar si se solicita promover a Admin_Red
+    const nuevoRolSolicitado = req.body.rol || (req.body.roles && (Array.isArray(req.body.roles) ? req.body.roles[0] : req.body.roles))
+    const cambiandoARolAdmin = !estudiante.roles.includes('admin_red') && (nuevoRolSolicitado === 'Admin_Red' || (Array.isArray(req.body.roles) && req.body.roles.includes('admin_red')))
 
     // Solo si el estudiante sigue como Estudiante, puede actualizar redComunitaria
     if (req.body.redComunitaria && !cambiandoARolAdmin) {
@@ -368,14 +534,22 @@ const actualizarEstudiante = async (req, res) => {
       return res.status(400).json({ msg: 'Debes llenar al menos un campo a actualizar' });
     }
 
-    const nuevoRol = camposActualizados.rol || estudiante.rol;
+    // Determinar el rol objetivo: soporta legacy `rol` y nuevo `roles`
+    let nuevoRol
+    if (camposActualizados.rol) {
+      nuevoRol = camposActualizados.rol
+    } else if (Array.isArray(camposActualizados.roles)) {
+      nuevoRol = camposActualizados.roles.includes('admin_red') ? 'Admin_Red' : 'Estudiante'
+    } else {
+      nuevoRol = estudiante.roles.includes('admin_red') ? 'Admin_Red' : 'Estudiante'
+    }
 
     if (!['Estudiante', 'Admin_Red'].includes(nuevoRol)) {
       return res.status(400).json({ msg: 'Rol inválido. Solo se permite "Estudiante" o "Admin_Red"' });
     }
 
     // Convertir a Admin_Red
-    if (estudiante.rol === 'Estudiante' && nuevoRol === 'Admin_Red') {
+    if (!estudiante.roles.includes('admin_red') && (nuevoRol === 'Admin_Red' || (Array.isArray(req.body.roles) && req.body.roles.includes('admin_red')))) {
       const redComunitaria = req.body.redComunitaria;
 
       if (!redComunitaria) {
@@ -393,24 +567,19 @@ const actualizarEstudiante = async (req, res) => {
         await red.save();
       }
 
-      const nuevoEmail = `AR${estudiante.email}`;
+      const nuevoEmail = estudiante.email;
 
-      const adminExistente = await AdminRed.findOne({ email: nuevoEmail });
-      if (adminExistente) {
-        return res.status(400).json({ msg: 'Ya existe un Admin_Red con ese correo' });
+      // Crear relación AdminRed (permiso sobre la red) y añadir rol al estudiante
+      const existingRelation = await AdminRed.findOne({ usuarioId: estudiante._id, redId: redComunitaria })
+      if (existingRelation) {
+        return res.status(400).json({ msg: 'Ya existe una relación de admin para ese usuario y red' })
       }
 
-      const nuevoAdmin = new AdminRed({
-        nombre: estudiante.nombre,
-        apellido: estudiante.apellido,
-        email: nuevoEmail,
-        confirmEmail: true,
-        password: estudiante.password,
-        rol: 'Admin_Red',
-        redAsignada: redComunitaria,
-      });
+      const rel = new AdminRed({ usuarioId: estudiante._id, redId: redComunitaria, estado: 'activo', fechaAprobacion: new Date() })
+      await rel.save()
 
-      await nuevoAdmin.save();
+      // Añadir rol admin_red al estudiante
+      await estudiante.addRole('admin_red')
 
       await enviarCorreoNuevoAdmin(estudiante.email, nuevoEmail);
 
@@ -418,20 +587,23 @@ const actualizarEstudiante = async (req, res) => {
     }
 
     // Convertir a Estudiante
-    if (estudiante.rol === 'Admin_Red' && nuevoRol === 'Estudiante') {
-      await AdminRed.findOneAndDelete({ _id: estudiante._id });
+    if (estudiante.roles.includes('admin_red') && (nuevoRol === 'Estudiante' || (Array.isArray(req.body.roles) && !req.body.roles.includes('admin_red')))) {
+      // Revocar rol admin_red y eliminar relaciones activas
+      await AdminRed.updateMany({ usuarioId: estudiante._id, estado: { $in: ['activo','pendiente'] } }, { $set: { estado: 'revocado' } })
+      await estudiante.removeRole('admin_red')
 
       if (estudiante.redComunitaria) {
-        const red = await RedComunitaria.findOne({ nombre: estudiante.redComunitaria });
-        if (red && red.miembros.includes(estudiante._id)) {
-          red.miembros = red.miembros.filter(idMiembro => !idMiembro.equals(estudiante._id));
-          red.cantidadMiembros = red.miembros.length;
-          await red.save();
+        // limpiar miembros de redes si corresponde
+        for (const redId of estudiante.redComunitaria) {
+          const red = await RedComunitaria.findById(redId)
+          if (red && red.miembros.includes(estudiante._id)) {
+            red.miembros = red.miembros.filter(idMiembro => !idMiembro.equals(estudiante._id))
+            red.cantidadMiembros = red.miembros.length
+            await red.save()
+          }
         }
 
-        if (!camposActualizados.redComunitaria) {
-          camposActualizados.redComunitaria = [];
-        }
+        if (!camposActualizados.redComunitaria) camposActualizados.redComunitaria = []
       }
     }
 
@@ -440,8 +612,8 @@ const actualizarEstudiante = async (req, res) => {
       camposActualizados.password = await estudiante.encrypPassword(camposActualizados.password);
     }
 
-    // Eliminar el campo rol para evitar modificarlo directamente en Estudiante
-    delete camposActualizados.rol;
+    // Eliminar el campo rol legacy para evitar modificarlo directamente en Estudiante
+    if (camposActualizados.rol) delete camposActualizados.rol;
 
     const estudianteActualizado = await Estudiante.findByIdAndUpdate(
       id,
@@ -595,10 +767,33 @@ const eliminarRed = async (req, res) => {
   }
 }
 
+const marcarRedVerificada = async (req, res) => {
+  try {
+    const id = req.params.id
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ msg: 'ID no válido' })
+    }
+
+    const { verificada = true } = req.body
+
+    const red = await RedComunitaria.findById(id)
+    if (!red) return res.status(404).json({ msg: 'Red no encontrada' })
+
+    red.esVerificada = Boolean(verificada)
+    await red.save()
+
+    return res.status(200).json({ msg: 'Estado de verificación actualizado', red })
+  } catch (error) {
+    console.error(error)
+    return res.status(500).json({ msg: 'Error en el servidor' })
+  }
+}
+
 export {
   login,
   recuperarPassword,
-  comprobarTokenPasword,
+  comprobarTokenPassword,
   crearNuevoPassword,
   perfil,
   actualizarPerfil,
@@ -613,5 +808,6 @@ export {
   obtenerRedes,
   obtenerRedPorId,
   actualizarRed,
-  eliminarRed
+  eliminarRed,
+  marcarRedVerificada
 }

@@ -13,9 +13,16 @@ const estudianteSchema = new Schema({
     required: true,
     trim: true
   },
-  celular: {
+  usuario: {
+    type: String,
+    required: true,
+    trim: true,
+    unique: true
+  },
+  username: {
     type: String,
     trim: true,
+    unique: true,
     default: null
   },
   email: {
@@ -23,6 +30,11 @@ const estudianteSchema = new Schema({
     required: true,
     trim: true,
     unique: true
+  },
+  roles: {
+    type: [String],
+    enum: ['estudiante', 'admin_red'],
+    default: ['estudiante']
   },
   password: {
     type: String,
@@ -43,14 +55,15 @@ const estudianteSchema = new Schema({
     type: Boolean,
     default: false
   },
-  rol: {
-    type: String,
-    enum: ['Estudiante', 'Admin_Red'],
-    default: 'Estudiante'
-  },
+  
   redComunitaria: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'RedComunitaria',
+    default: []
+  }],
+  publicacionesGuardadas: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Publicacion',
     default: []
   }],
   authMicrosoft: {
@@ -78,5 +91,20 @@ estudianteSchema.methods.crearToken = function () {
   const tokenGenerado = this.token = Math.random().toString(36).slice(2);
   return tokenGenerado;
 };
+
+// Agregar/Remover roles
+estudianteSchema.methods.addRole = async function (role) {
+  if (!this.roles.includes(role)) {
+    this.roles.push(role)
+    await this.save()
+  }
+}
+
+estudianteSchema.methods.removeRole = async function (role) {
+  if (this.roles.includes(role)) {
+    this.roles = this.roles.filter(r => r !== role)
+    await this.save()
+  }
+}
 
 export default model('Estudiante', estudianteSchema, 'estudiantes');

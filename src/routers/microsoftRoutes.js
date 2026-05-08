@@ -1,8 +1,10 @@
 import { Router } from 'express'
 import passport from 'passport'
 import jwt from 'jsonwebtoken'
+import { signToken } from '../controllers/authController.js'
 import { verificarEstadoLogin } from '../middlewares/verificarLogin.js'
 import Estudiante from '../models/Estudiantes.js'
+import RedComunitaria from '../models/RedComunitaria.js'
 
 const loginRouter = Router()
 
@@ -20,26 +22,37 @@ loginRouter.get('/microsoft/callback',
       let estudianteBDD = await Estudiante.findOne({ email: user.emails?.[0]?.value || user._json.mail });
 
       if (!estudianteBDD) {
+        // generar usuario a partir del email si no existe
+        let baseUsuario = (user.emails?.[0]?.value || user._json.mail || '').split('@')[0] || `ms${Date.now()}`
+        let usuarioFinal = baseUsuario
+        let sufijo = 0
+        while (await Estudiante.findOne({ usuario: usuarioFinal })) {
+          sufijo += 1
+          usuarioFinal = `${baseUsuario}${sufijo}`
+        }
+
         estudianteBDD = new Estudiante({
           nombre: user.name?.givenName || user._json.givenName,
           apellido: user.name?.familyName || user._json.surname,
+          usuario: usuarioFinal,
           email: user.emails?.[0]?.value || user._json.mail,
-          rol: "Estudiante",
+          roles: ['estudiante'],
           authMicrosoft: true
         });
+        // asignar redes globales automáticamente
+        try {
+          const redesGlobales = await RedComunitaria.find({ esGlobal: true }).select('_id')
+          if (redesGlobales && redesGlobales.length > 0) {
+            estudianteBDD.redComunitaria = redesGlobales.map(r => r._id)
+          }
+        } catch (err) {
+          console.error('Error asignando redes globales a Microsoft user:', err)
+        }
+
         await estudianteBDD.save();
       }
 
-      const token = jwt.sign(
-        {
-          id: estudianteBDD._id.toString(),
-          rol: "Estudiante",
-          displayName: user.displayName,
-          email: estudianteBDD.email,
-        },
-        process.env.JWT_SECRET,
-        { expiresIn: '1h' }
-      );
+      const token = signToken(estudianteBDD, 'mobile')
 
       res.send(`<!DOCTYPE html>
         <html lang="en">
@@ -51,7 +64,7 @@ loginRouter.get('/microsoft/callback',
               id: "${estudianteBDD._id}",
               displayName: "${user.displayName}",
               email: "${estudianteBDD.email}",
-              rol: "Estudiante",
+              roles: ${JSON.stringify(estudianteBDD.roles || ['estudiante'])},
               name: {
                 givenName: "${user.name?.givenName || user._json.givenName}",
                 familyName: "${user.name?.familyName || user._json.surname}"

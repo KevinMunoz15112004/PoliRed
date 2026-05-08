@@ -1,5 +1,8 @@
 import mongoose from "mongoose";
 
+const TIPOS_CONTENIDO = ['texto', 'imagen', 'video'];
+const CATEGORIAS_PUBLICACION = ['venta', 'comunidad', 'memes', 'noticias'];
+
 const comentarioSchema = new mongoose.Schema({
   autorId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -34,6 +37,21 @@ const publicacionSchema = new mongoose.Schema({
   contenido: {
     type: String,
     required: true
+  },
+  tipoContenido: {
+    type: String,
+    enum: TIPOS_CONTENIDO,
+    default: 'texto'
+  },
+  categoria: {
+    type: String,
+    enum: CATEGORIAS_PUBLICACION,
+    default: 'comunidad'
+  },
+  mediaUrl: {
+    type: String,
+    default: null,
+    trim: true
   },
   comentarios: [comentarioSchema],
   likes: [{

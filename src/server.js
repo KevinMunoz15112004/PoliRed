@@ -5,6 +5,7 @@ import cors from 'cors'
 import superAdminRoutes from './routers/superAdminRoutes.js'
 import estudiantesRoutes from './routers/estudiantesRoutes.js'
 import { loginRouter } from './routers/microsoftRoutes.js'
+import authRoutes from './routers/authRoutes.js'
 import cloudinary from 'cloudinary'
 import fileUpload from "express-fileupload"
 import passport from 'passport'
@@ -14,6 +15,7 @@ import { configurarSocket } from './socket.js'
 import http from 'http';
 import './middlewares/microsoftMiddleware.js'
 import adminRedes from './routers/adminRedRoutes.js'
+import socialRoutes from './routers/socialRoutes.js'
 
 
 // Inicializaciones
@@ -45,11 +47,17 @@ configurarSocket(server)
 // Gestión del super admin
 app.use('/api', superAdminRoutes)
 
+// Rutas de autenticación unificada
+app.use('/api', authRoutes)
+
 // Rutas para el admin de red
 app.use('/api', adminRedes)
 
 // Rutas para estudiantes
 app.use('/api', estudiantesRoutes)
+
+// Rutas complementarias de funcionalidades sociales
+app.use('/api', socialRoutes)
 
 // Ruta para el chatbot
 app.use('/api', chatRoutes)

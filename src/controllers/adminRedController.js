@@ -1,6 +1,5 @@
 import AdminRed from '../models/adminRedes.js'
 import Estudiante from '../models/Estudiantes.js'
-import { crearTokenJWT } from '../middlewares/authAdminRed.js'
 import { sendMailToRecoveryPassword } from '../config/nodemailer.js'
 import fs from 'fs-extra'
 import cloudinary from 'cloudinary'
@@ -9,39 +8,7 @@ import { Articulo } from '../models/Articulos.js'
 import mongoose from 'mongoose'
 import RedComunitaria from '../models/RedComunitaria.js'
 
-//Controladores para la gestión de la cuenta
-const loginAdminRed = async (req, res) => {
-  const { email, password } = req.body
-  if (!email || !password) {
-    return res.status(400).json({ msg: "Debes llenar todos los campos" })
-  }
-
-  const adminBDD = await AdminRed.findOne({ email }).select("-__v -token -updatedAt -createdAt")
-  if (!adminBDD) {
-    return res.status(404).json({ msg: "Usuario no registrado" })
-  }
-
-  if (!adminBDD.confirmEmail) {
-    return res.status(403).json({ msg: "Debes verificar tu cuenta" })
-  }
-
-  const match = await adminBDD.matchPassword(password)
-  if (!match) {
-    return res.status(401).json({ msg: "Contraseña incorrecta" })
-  }
-
-  const token = crearTokenJWT(adminBDD._id, adminBDD.rol)
-
-  res.status(200).json({
-    token,
-    rol: adminBDD.rol,
-    nombre: adminBDD.nombre,
-    apellido: adminBDD.apellido,
-    celular: adminBDD.celular,
-    email: adminBDD.email,
-    _id: adminBDD._id
-  })
-}
+// Controladores para la gestión de la cuenta (login movido a /api/auth/login)
 
 const perfilAdminRed = (req, res) => {
   delete req.user.token
@@ -65,16 +32,16 @@ const actualizarPerfilAdminRed = async (req, res) => {
 
   if (Object.keys(datos).length === 0) return res.status(400).json({ msg: "No se recibió ningún cambio" })
 
-  const adminRedBDD = await AdminRed.findById(id)
-  if (!adminRedBDD) return res.status(404).json({ msg: "Usuario no encontrado" })
+  const estudianteBDD = await Estudiante.findById(id)
+  if (!estudianteBDD) return res.status(404).json({ msg: 'Usuario no encontrado' })
 
-  if (datos.email && datos.email !== adminRedBDD.email) {
-    const existeEmail = await AdminRed.findOne({ email: datos.email })
-    if (existeEmail) return res.status(400).json({ msg: "El correo ya está registrado" })
+  if (datos.email && datos.email !== estudianteBDD.email) {
+    const existeEmail = await Estudiante.findOne({ email: datos.email })
+    if (existeEmail) return res.status(400).json({ msg: 'El correo ya está registrado' })
   }
 
-  Object.assign(adminRedBDD, datos)
-  await adminRedBDD.save()
+  Object.assign(estudianteBDD, datos)
+  await estudianteBDD.save()
 
   res.status(200).json({ msg: "Perfil actualizado correctamente" })
 }
@@ -85,14 +52,14 @@ const actualizarPasswordAdminRed = async (req, res) => {
 
   if (!passwordactual || !passwordnuevo) return res.status(400).json({ msg: "Campos obligatorios" })
 
-  const adminBDD = await AdminRed.findById(id)
-  if (!adminBDD) return res.status(404).json({ msg: "Usuario no encontrado" })
+  const estudianteBDD = await Estudiante.findById(id)
+  if (!estudianteBDD) return res.status(404).json({ msg: 'Usuario no encontrado' })
 
-  const match = await adminBDD.matchPassword(passwordactual)
-  if (!match) return res.status(400).json({ msg: "La contraseña actual es incorrecta" })
+  const match = await estudianteBDD.matchPassword(passwordactual)
+  if (!match) return res.status(400).json({ msg: 'La contraseña actual es incorrecta' })
 
-  adminBDD.password = await adminBDD.encrypPassword(passwordnuevo)
-  await adminBDD.save()
+  estudianteBDD.password = await estudianteBDD.encrypPassword(passwordnuevo)
+  await estudianteBDD.save()
 
   res.status(200).json({ msg: "Contraseña actualizada correctamente" })
 }
@@ -106,8 +73,8 @@ const actualizarAvatarAdminRed = async (req, res) => {
 
   const file = req.files.imagen
 
-  const adminRedBDD = await AdminRed.findById(id)
-  if (!adminRedBDD) {
+  const estudianteBDD = await Estudiante.findById(id)
+  if (!estudianteBDD) {
     return res.status(404).json({ msg: 'Usuario no encontrado' })
   }
 
@@ -120,13 +87,10 @@ const actualizarAvatarAdminRed = async (req, res) => {
 
     await fs.unlink(file.tempFilePath)
 
-    adminRedBDD.avatar = resultado.secure_url
-    await adminRedBDD.save()
+    estudianteBDD.avatar = resultado.secure_url
+    await estudianteBDD.save()
 
-    res.status(200).json({
-      msg: 'Avatar actualizado correctamente',
-      avatar: adminRedBDD.avatar,
-    })
+    res.status(200).json({ msg: 'Avatar actualizado correctamente', avatar: estudianteBDD.avatar })
   } catch (error) {
     console.error(error)
     res.status(500).json({ msg: 'Error al subir imagen', error: error.message })
@@ -135,15 +99,16 @@ const actualizarAvatarAdminRed = async (req, res) => {
 
 const listarPublicaciones = async (req, res) => {
   try {
-    if (req.user.rol !== 'Admin_Red') {
+    if (!req.user.roles || !req.user.roles.includes('admin_red')) {
       return res.status(403).json({ msg: 'Acceso no autorizado. Solo para administradores de red.' })
     }
 
-    const redAsignada = req.user.redAsignada;
+    // Determinar la red asignada a partir de relaciones admin
+    const relaciones = req.adminRelations || []
+    const activa = relaciones.find(r => r.estado === 'activo')
+    const redAsignada = activa ? activa.redId : null
 
-    if (!redAsignada) {
-      return res.status(400).json({ msg: 'El administrador no tiene una red comunitaria asignada' })
-    }
+    if (!redAsignada) return res.status(400).json({ msg: 'El administrador no tiene una red comunitaria asignada' })
 
     const publicaciones = await Publicacion.find({ comunidadId: redAsignada })
       .populate('autorId', 'nombre apellido')
@@ -166,7 +131,7 @@ const eliminarPublicacionAdmin = async (req, res) => {
     const { id } = req.params
     const admin = req.user
 
-    if (admin.rol !== 'Admin_Red') {
+    if (!req.user.roles || !req.user.roles.includes('admin_red')) {
       return res.status(403).json({ msg: 'Acceso no autorizado. Solo administradores de red pueden eliminar publicaciones.' })
     }
 
@@ -179,7 +144,7 @@ const eliminarPublicacionAdmin = async (req, res) => {
       return res.status(404).json({ msg: 'Publicación no encontrada' })
     }
 
-    if (!publicacion.comunidadId.equals(admin.redAsignada)) {
+    if (!publicacion.comunidadId.equals(redAsignada)) {
       return res.status(403).json({ msg: 'No tienes permiso para eliminar publicaciones de esta red' })
     }
 
@@ -194,15 +159,15 @@ const eliminarPublicacionAdmin = async (req, res) => {
 
 const listarArticulosPorRedAdmin = async (req, res) => {
   try {
-    if (req.user.rol !== 'Admin_Red') {
+    if (!req.user.roles || !req.user.roles.includes('admin_red')) {
       return res.status(403).json({ msg: 'Acceso no autorizado. Solo para administradores de red.' })
     }
 
-    const redAsignada = req.user.redAsignada
+    const relaciones = req.adminRelations || []
+    const activa = relaciones.find(r => r.estado === 'activo')
+    const redAsignada = activa ? activa.redId : null
 
-    if (!redAsignada) {
-      return res.status(400).json({ msg: 'El administrador no tiene una red comunitaria asignada' })
-    }
+    if (!redAsignada) return res.status(400).json({ msg: 'El administrador no tiene una red comunitaria asignada' })
 
     const articulos = await Articulo.find({ redComunitaria: redAsignada })
       .populate('autorId', 'nombre apellido email')
@@ -227,7 +192,7 @@ const eliminarArticuloAdmin = async (req, res) => {
     const { id } = req.params
     const admin = req.user
 
-    if (admin.rol !== 'Admin_Red') {
+    if (!req.user.roles || !req.user.roles.includes('admin_red')) {
       return res.status(403).json({ msg: 'Acceso no autorizado. Solo administradores de red pueden eliminar artículos.' })
     }
 
@@ -240,7 +205,7 @@ const eliminarArticuloAdmin = async (req, res) => {
       return res.status(404).json({ msg: 'Artículo no encontrado' })
     }
 
-    if (!articulo.redComunitaria.equals(admin.redAsignada)) {
+    if (!articulo.redComunitaria.equals(redAsignada)) {
       return res.status(403).json({ msg: 'No tienes permiso para eliminar artículos de esta red' })
     }
 
@@ -255,21 +220,16 @@ const eliminarArticuloAdmin = async (req, res) => {
 
 const obtenerInfoRed = async (req, res) => {
   try {
-    const adminId = req.user._id || req.user.id
+    if (!req.user.roles || !req.user.roles.includes('admin_red')) return res.status(403).json({ msg: 'Acceso no autorizado' })
 
-    const admin = await AdminRed.findById(adminId).populate('redAsignada')
-    if (!admin) {
-      return res.status(404).json({ msg: 'Administrador no encontrado' })
-    }
+    const relaciones = req.adminRelations || []
+    const activa = relaciones.find(r => r.estado === 'activo')
+    if (!activa) return res.status(400).json({ msg: 'No tienes una red comunitaria asignada.' })
 
-    if (!admin.redAsignada) {
-      return res.status(400).json({ msg: 'No tienes una red comunitaria asignada.' })
-    }
+    const red = await RedComunitaria.findById(activa.redId)
+    if (!red) return res.status(404).json({ msg: 'Red comunitaria no encontrada' })
 
-    return res.status(200).json({
-      msg: 'Red comunitaria asignada',
-      red: admin.redAsignada
-    });
+    return res.status(200).json({ msg: 'Red comunitaria asignada', red })
 
   } catch (error) {
     console.error(error);
@@ -281,15 +241,12 @@ const obtenerInfoRed = async (req, res) => {
 
 const verEstudiantesDeRed = async (req, res) => {
   try {
-    if (req.user.rol !== 'Admin_Red') {
-      return res.status(403).json({ msg: 'Acceso no autorizado. Solo para administradores de red.' })
-    }
+    if (!req.user.roles || !req.user.roles.includes('admin_red')) return res.status(403).json({ msg: 'Acceso no autorizado. Solo para administradores de red.' })
+    const relaciones = req.adminRelations || []
+    const activa = relaciones.find(r => r.estado === 'activo')
+    const redAsignada = activa ? activa.redId : null
 
-    const redAsignada = req.user.redAsignada
-
-    if (!redAsignada) {
-      return res.status(400).json({ msg: 'No tienes una red comunitaria asignada.' })
-    }
+    if (!redAsignada) return res.status(400).json({ msg: 'No tienes una red comunitaria asignada.' })
 
     const estudiantes = await Estudiante.find({ redComunitaria: redAsignada }).select('nombre apellido email')
 
@@ -306,11 +263,13 @@ const verEstudiantesDeRed = async (req, res) => {
 
 const eliminarEstudianteDeRed = async (req, res) => {
   try {
-    if (req.user.rol !== 'Admin_Red') {
+    if (!req.user.roles || !req.user.roles.includes('admin_red')) {
       return res.status(403).json({ msg: 'Acceso no autorizado. Solo para administradores de red.' })
     }
 
-    const redAsignadaId = req.user.redAsignada
+    const relaciones = req.adminRelations || []
+    const activa = relaciones.find(r => r.estado === 'activo')
+    const redAsignadaId = activa ? activa.redId : null
     const { estudianteId } = req.params
 
     const estudiante = await Estudiante.findById(estudianteId)
@@ -319,10 +278,8 @@ const eliminarEstudianteDeRed = async (req, res) => {
       return res.status(404).json({ msg: 'Estudiante no encontrado' })
     }
 
-    if (
-      !estudiante.redComunitaria ||
-      !estudiante.redComunitaria.includes(redAsignadaId.toString())
-    ) {
+    if (!redAsignadaId) return res.status(403).json({ msg: 'No autorizado para esta acción' })
+    if (!estudiante.redComunitaria || !estudiante.redComunitaria.includes(redAsignadaId.toString())) {
       return res.status(403).json({ msg: 'No puedes modificar estudiantes que no pertenecen a tu red comunitaria' })
     }
 
@@ -349,12 +306,12 @@ const eliminarEstudianteDeRed = async (req, res) => {
 
 const actualizarRedComunitaria = async (req, res) => {
   try {
-    if (req.user.rol !== 'Admin_Red') {
+    if (!req.user.roles || !req.user.roles.includes('admin_red')) {
       return res.status(403).json({ msg: 'Acceso no autorizado. Solo los administradores de red pueden realizar esta acción.' })
     }
 
     const redId = req.user.redAsignada
-    const { nombre, descripcion } = req.body
+    const { descripcion } = req.body
 
     if (!redId) {
       return res.status(400).json({ msg: 'No estás asignado a ninguna red comunitaria.' })
@@ -368,18 +325,34 @@ const actualizarRedComunitaria = async (req, res) => {
 
     let seActualizo = false
 
-    if (nombre?.trim()) {
-      red.nombre = nombre.trim()
-      seActualizo = true
-    }
-
+    // El nombre NO puede ser modificado por el Admin_Red. Solo SuperAdmin puede cambiarlo.
     if (descripcion?.trim()) {
       red.descripcion = descripcion.trim()
       seActualizo = true
     }
 
+    // Si se sube una imagen, subirla a Cloudinary y asignarla a fotoPerfil
+    if (req.files && req.files.imagen) {
+      const file = req.files.imagen
+      try {
+        const resultado = await cloudinary.uploader.upload(file.tempFilePath, {
+          folder: 'foto_red_comunitaria',
+          public_id: `${red._id}_foto`,
+          overwrite: true,
+        })
+
+        await fs.unlink(file.tempFilePath)
+
+        red.fotoPerfil = resultado.secure_url
+        seActualizo = true
+      } catch (error) {
+        console.error('Error al subir imagen de la red:', error)
+        return res.status(500).json({ msg: 'Error al subir la imagen' })
+      }
+    }
+
     if (!seActualizo) {
-      return res.status(400).json({ msg: 'Debe proporcionar al menos un campo válido para actualizar (nombre o descripción).' })
+      return res.status(400).json({ msg: 'Debe proporcionar al menos un campo válido para actualizar (descripción o imagen).' })
     }
 
     await red.save()
@@ -396,7 +369,6 @@ const actualizarRedComunitaria = async (req, res) => {
 }
 
 export {
-  loginAdminRed,
   perfilAdminRed,
   actualizarAvatarAdminRed,
   actualizarPerfilAdminRed,

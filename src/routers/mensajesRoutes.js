@@ -1,12 +1,12 @@
 import express from 'express';
 import Mensaje from '../models/Mensajes.js';
-import { verificarTokenEstudiante } from '../middlewares/JWTEstudiante.js';
+import { verifyToken } from '../middlewares/auth.js';
 import mongoose from 'mongoose';
 import Estudiantes from '../models/Estudiantes.js';
 
 const router = express.Router();
 
-router.get('/mensajes/historial/:estudianteA/:estudianteB', verificarTokenEstudiante, async (req, res) => {
+router.get('/mensajes/historial/:estudianteA/:estudianteB', verifyToken, async (req, res) => {
   const { estudianteA, estudianteB } = req.params;
 
   if (!mongoose.Types.ObjectId.isValid(estudianteA) || !mongoose.Types.ObjectId.isValid(estudianteB)) {

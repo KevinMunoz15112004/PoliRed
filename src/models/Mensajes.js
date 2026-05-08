@@ -1,6 +1,12 @@
 import { Schema, model } from 'mongoose';
 
 const mensajeSchema = new Schema({
+  conversacionId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Conversacion',
+    default: null,
+    index: true
+  },
   autor: {
     type: Schema.Types.ObjectId,
     ref: 'Estudiante',

@@ -3,7 +3,6 @@ import mongoose from "mongoose"
 import AdminRed from '../models/adminRedes.js'
 import { Articulo } from '../models/Articulos.js'
 import { sendMailToRegister, sendMailToRecoveryPasswordE } from '../config/nodemailer.js'
-import { crearTokenJWT } from "../middlewares/JWTEstudiante.js"
 import SuperAdmin from '../models/SuperAdmin.js'
 import Publicacion from "../models/Publicaciones.js"
 import RedComunitaria from '../models/RedComunitaria.js'
@@ -11,50 +10,11 @@ import { Stripe } from "stripe"
 
 const stripe = new Stripe(`${process.env.STRIPE_SECRET_KEY}`)
 
-const loginEstudiante = async (req, res) => {
-  const { email, password } = req.body
-
-  if (!email || !password) {
-    return res.status(400).json({ msg: "Lo sentimos, debes llenar todos los campos" })
-  }
-
-  const estudianteBDD = await Estudiante.findOne({ email }).select("-__v -token -updatedAt -createdAt")
-
-  if (!estudianteBDD) {
-    return res.status(404).json({ msg: "Lo sentimos, el usuario no se encuentra registrado" })
-  }
-
-  if (estudianteBDD.authMicrosoft) {
-    return res.status(400).json({ msg: "Este usuario debe iniciar sesión con Microsoft" })
-  }
-
-  if (!estudianteBDD.confirmEmail) {
-    return res.status(403).json({ msg: "Lo sentimos, debes verificar tu cuenta" })
-  }
-
-  const verificarPassword = await estudianteBDD.matchPassword(password)
-  if (!verificarPassword) {
-    return res.status(401).json({ msg: "Lo sentimos, la contraseña no es la correcta" })
-  }
-
-  const { nombre, apellido, celular, _id, rol, redComunitaria } = estudianteBDD
-  const token = crearTokenJWT(estudianteBDD._id, estudianteBDD.rol)
-
-  res.status(200).json({
-    token,
-    rol,
-    nombre,
-    apellido,
-    celular,
-    _id,
-    email: estudianteBDD.email,
-    redComunitaria
-  })
-}
+// NOTE: login functionality moved to /api/auth/login (authController)
 
 const registroEstudiante = async (req, res) => {
   try {
-    const { nombre, apellido, celular, email, password, redComunitaria } = req.body
+    const { nombre, apellido, email, password, redComunitaria, usuario } = req.body
 
     if ([nombre, apellido, email, password].some(campo => !campo)) {
       return res.status(400).json({ msg: "Lo sentimos, debes llenar todos los campos obligatorios" })
@@ -70,15 +30,21 @@ const registroEstudiante = async (req, res) => {
       return res.status(400).json({ msg: "El apellido no debe contener números ni caracteres especiales" })
     }
 
-    const regexCelular = /^\d{10}$/
-    
-    if (celular && !regexCelular.test(celular)) {
-      return res.status(400).json({ msg: "El número celular debe contener exactamente 10 dígitos y sin letras ni símbolos" });
-    }
+    // Nota: el campo `celular` fue eliminado del modelo; ya no se valida ni se guarda.
 
     const verificarEmailBDD = await Estudiante.findOne({ email })
     if (verificarEmailBDD) {
       return res.status(400).json({ msg: "Lo sentimos, el email ya se encuentra registrado" })
+    }
+
+    // username (usuario) debe existir y ser único
+    if (!usuario || !usuario.trim()) {
+      return res.status(400).json({ msg: "Lo sentimos, debes proporcionar un usuario" })
+    }
+
+    const existeUsuario = await Estudiante.findOne({ usuario: usuario.trim() })
+    if (existeUsuario) {
+      return res.status(400).json({ msg: "Lo sentimos, el usuario ya se encuentra registrado" })
     }
 
     const verificarEmailSA = await SuperAdmin.findOne({ email })
@@ -86,20 +52,43 @@ const registroEstudiante = async (req, res) => {
       return res.status(400).json({ msg: "Lo sentimos, el email ya pertenece al Super Administrador" })
     }
 
+    // Asignar redes globales automáticamente
+    const redesGlobales = await RedComunitaria.find({ esGlobal: true }).select('_id')
+    const redesGlobalIds = redesGlobales.map(r => r._id.toString())
+
+    const solicitadoRedes = Array.isArray(redComunitaria) ? redComunitaria : (redComunitaria ? [redComunitaria] : [])
+    const combinado = Array.from(new Set([...solicitadoRedes.map(String), ...redesGlobalIds]))
+
     const nuevoEstudiante = new Estudiante({
       nombre,
       apellido,
-      celular,
+      usuario: usuario.trim(),
+      username: usuario.trim(),
       email,
       password,
-      redComunitaria,
-      rol: "Estudiante"
+      redComunitaria: combinado,
+      roles: ['estudiante']
     })
 
     nuevoEstudiante.password = await nuevoEstudiante.encrypPassword(password)
     const token = nuevoEstudiante.crearToken()
 
     await nuevoEstudiante.save();
+
+    // Agregar al listado de miembros de las redes asignadas (incluyendo globales)
+    for (const redId of nuevoEstudiante.redComunitaria) {
+      try {
+        const red = await RedComunitaria.findById(redId)
+        if (red && !red.miembros.includes(nuevoEstudiante._id)) {
+          red.miembros.push(nuevoEstudiante._id)
+          red.cantidadMiembros = red.miembros.length
+          await red.save()
+        }
+      } catch (err) {
+        console.error('Error actualizando miembros de la red:', err)
+      }
+    }
+
     await sendMailToRegister(email, token)
 
     return res.status(201).json({
@@ -109,7 +98,7 @@ const registroEstudiante = async (req, res) => {
         nombre: nuevoEstudiante.nombre,
         apellido: nuevoEstudiante.apellido,
         email: nuevoEstudiante.email,
-        rol: nuevoEstudiante.rol,
+        roles: nuevoEstudiante.roles,
         redComunitaria: nuevoEstudiante.redComunitaria
       }
     })
@@ -211,7 +200,7 @@ const crearNuevoPasswordEstudiante = async (req, res) => {
 
   await estudianteBDD.save()
 
-  const correoAdmin = `AR${estudianteBDD.email}`
+  const correoAdmin = estudianteBDD.email
   const admin = await AdminRed.findOne({ email: correoAdmin })
 
   if (admin && !admin.authMicrosoft) {
@@ -223,18 +212,20 @@ const crearNuevoPasswordEstudiante = async (req, res) => {
 }
 
 const perfilEstudiante = (req, res) => {
-  delete req.estudianteBDD.token
-  delete req.estudianteBDD.confirmEmail
-  delete req.estudianteBDD.createdAt
-  delete req.estudianteBDD.updatedAt
-  delete req.estudianteBDD.__v
-
-  res.status(200).json(req.estudianteBDD)
+  if (req.user) {
+    delete req.user.token
+    delete req.user.confirmEmail
+    delete req.user.createdAt
+    delete req.user.updatedAt
+    delete req.user.__v
+    return res.status(200).json(req.user)
+  }
+  return res.status(401).json({ msg: 'Usuario no autenticado' })
 }
 
 const actualizarPerfilEstudiante = async (req, res) => {
   const { id } = req.params;
-  const { nombre, apellido, celular, email, redComunitaria } = req.body
+  const { nombre, apellido, email, redComunitaria } = req.body
 
   if (!mongoose.Types.ObjectId.isValid(id)) {
     return res.status(404).json({ msg: "Lo sentimos, debe ser un ID válido" })
@@ -266,12 +257,6 @@ const actualizarPerfilEstudiante = async (req, res) => {
     }
   }
 
-  if (celular !== undefined) {
-    const celularRegex = /^\d{10}$/;
-    if (!celularRegex.test(celular.trim())) {
-      return res.status(400).json({ msg: "El celular debe contener exactamente 10 dígitos numéricos" });
-    }
-  }
 
   const estudianteBDD = await Estudiante.findById(id)
   if (!estudianteBDD) {
@@ -288,8 +273,15 @@ const actualizarPerfilEstudiante = async (req, res) => {
 
   if (nombre) estudianteBDD.nombre = nombre
   if (apellido) estudianteBDD.apellido = apellido
-  if (celular) estudianteBDD.celular = celular
-  if (redComunitaria) estudianteBDD.redComunitaria = redComunitaria
+  if (redComunitaria) {
+    // No permitir remover redes globales: siempre mantenerlas
+    const redesGlobales = await RedComunitaria.find({ esGlobal: true }).select('_id')
+    const redesGlobalIds = redesGlobales.map(r => r._id.toString())
+
+    const solicitado = Array.isArray(redComunitaria) ? redComunitaria.map(String) : [String(redComunitaria)]
+    const combinado = Array.from(new Set([...solicitado, ...redesGlobalIds]))
+    estudianteBDD.redComunitaria = combinado
+  }
 
   await estudianteBDD.save()
 
@@ -299,7 +291,6 @@ const actualizarPerfilEstudiante = async (req, res) => {
       id: estudianteBDD._id,
       nombre: estudianteBDD.nombre,
       apellido: estudianteBDD.apellido,
-      celular: estudianteBDD.celular,
       email: estudianteBDD.email,
       redComunitaria: estudianteBDD.redComunitaria
     }
@@ -307,7 +298,7 @@ const actualizarPerfilEstudiante = async (req, res) => {
 }
 
 const actualizarPasswordEstudiante = async (req, res) => {
-  const estudianteBDD = await Estudiante.findById(req.estudianteBDD._id)
+  const estudianteBDD = await Estudiante.findById(req.user?._id)
 
   if (!estudianteBDD) {
     return res.status(404).json({ msg: "Lo sentimos, no existe el estudiante" })
@@ -331,7 +322,8 @@ const actualizarPasswordEstudiante = async (req, res) => {
 
 const obtenerRedesComunitarias = async (req, res) => {
   try {
-    const redes = await RedComunitaria.find({}, 'nombre descripcion cantidadMiembros')
+    // Excluir redes globales del listado general
+    const redes = await RedComunitaria.find({ esGlobal: { $ne: true } }, 'nombre descripcion cantidadMiembros esOficial esVerificada')
     res.status(200).json(redes)
   } catch (error) {
     console.error('Error al obtener redes comunitarias:', error)
@@ -339,8 +331,19 @@ const obtenerRedesComunitarias = async (req, res) => {
   }
 }
 
+const obtenerRedesExplorar = async (req, res) => {
+  try {
+    // Solo redes marcadas como globales
+    const redes = await RedComunitaria.find({ esGlobal: true }).select('nombre descripcion cantidadMiembros esOficial esVerificada cuentaGestion')
+    res.status(200).json(redes)
+  } catch (error) {
+    console.error('Error al obtener redes para explorar:', error)
+    res.status(500).json({ msg: 'Error del servidor' })
+  }
+}
+
 const unirseARedComunitaria = async (req, res) => {
-  const estudianteId = req.estudianteBDD._id
+  const estudianteId = req.user?._id
   const { redId } = req.body
 
   if (!redId) {
@@ -386,7 +389,7 @@ const unirseARedComunitaria = async (req, res) => {
 
 const listarRedesDelEstudiante = async (req, res) => {
   try {
-    const estudianteId = req.estudianteBDD._id
+    const estudianteId = req.user?._id
 
     const estudiante = await Estudiante.findById(estudianteId)
       .populate('redComunitaria', 'nombre descripcion')
@@ -405,10 +408,20 @@ const listarRedesDelEstudiante = async (req, res) => {
 const crearPublicacion = async (req, res) => {
   try {
     const { titulo, contenido, comunidadId } = req.body
-    const estudianteId = req.estudianteBDD._id
+    const estudianteId = req.user?._id
 
-    if (!mongoose.Types.ObjectId.isValid(comunidadId)) {
-      return res.status(400).json({ msg: "ID de comunidad no válido" })
+    let targetComunidadId = comunidadId
+
+    // Si no se envía comunidadId, usar la red global por defecto
+    let redGlobal = null
+    if (!targetComunidadId) {
+      redGlobal = await RedComunitaria.findOne({ esGlobal: true })
+      if (!redGlobal) return res.status(500).json({ msg: 'No hay red global configurada' })
+      targetComunidadId = redGlobal._id.toString()
+    } else {
+      if (!mongoose.Types.ObjectId.isValid(targetComunidadId)) {
+        return res.status(400).json({ msg: "ID de comunidad no válido" })
+      }
     }
 
     const estudianteBDD = await Estudiante.findById(estudianteId)
@@ -426,15 +439,36 @@ const crearPublicacion = async (req, res) => {
       return res.status(400).json({ msg: `El título no debe exceder de ${maxPalabrasTitulo} palabras` })
     }
 
-    if (!req.estudianteBDD.redComunitaria) return res.status(400).json({ msg: "Para crear una publicación debes pertenecer a una red comunitaria" })
+    // Obtener doc de la red objetivo para determinar si es global
+    const redDoc = await RedComunitaria.findById(targetComunidadId)
+    if (!redDoc) return res.status(404).json({ msg: 'Red comunitaria no encontrada' })
 
-    if (!estudianteBDD.redComunitaria.some(r => r.equals(comunidadId))) {
-      return res.status(403).json({ msg: "No perteneces a esta red comunitaria" })
+    const pertenece = estudianteBDD.redComunitaria && estudianteBDD.redComunitaria.some(r => r.equals(targetComunidadId))
+    const esGlobalTarget = Boolean(redDoc.esGlobal)
+
+    if (!pertenece) {
+      if (esGlobalTarget) {
+        try {
+          estudianteBDD.redComunitaria = estudianteBDD.redComunitaria || []
+          estudianteBDD.redComunitaria.push(redDoc._id)
+          await estudianteBDD.save()
+
+          if (!redDoc.miembros.includes(estudianteBDD._id)) {
+            redDoc.miembros.push(estudianteBDD._id)
+            redDoc.cantidadMiembros = redDoc.miembros.length
+            await redDoc.save()
+          }
+        } catch (err) {
+          console.error('Error añadiendo estudiante a red global:', err)
+        }
+      } else {
+        return res.status(403).json({ msg: "No perteneces a esta red comunitaria" })
+      }
     }
 
     const nuevaPublicacion = new Publicacion({
       autorId: estudianteId,
-      comunidadId: comunidadId,
+      comunidadId: targetComunidadId,
       titulo,
       contenido
     })
@@ -454,7 +488,7 @@ const crearPublicacion = async (req, res) => {
 const actualizarPublicacion = async (req, res) => {
   try {
     const { id } = req.params
-    const estudianteId = req.estudianteBDD._id
+    const estudianteId = req.user?._id
     const { titulo, contenido } = req.body
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -489,7 +523,7 @@ const actualizarPublicacion = async (req, res) => {
 const eliminarPublicacion = async (req, res) => {
   try {
     const { id } = req.params
-    const estudianteId = req.estudianteBDD._id
+    const estudianteId = req.user?._id
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ msg: 'ID de publicación no válido' })
@@ -560,7 +594,7 @@ const listarPublicacionesPorRed = async (req, res) => {
 const publicarArticulo = async (req, res) => {
   try {
     const { titulo, descripcion, precio, comunidadId, imagen } = req.body
-    const estudianteId = req.estudianteBDD._id
+    const estudianteId = req.user?._id
 
     if (!mongoose.Types.ObjectId.isValid(comunidadId)) {
       return res.status(400).json({ msg: "ID de comunidad no válido" })
@@ -674,7 +708,7 @@ const listarArticulosPorRed = async (req, res) => {
 const actualizarArticulo = async (req, res) => {
   try {
     const { id } = req.params
-    const estudianteId = req.estudianteBDD._id
+    const estudianteId = req.user?._id
     const { titulo, descripcion, precio, imagen } = req.body
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -717,7 +751,7 @@ const actualizarArticulo = async (req, res) => {
 const eliminarArticulo = async (req, res) => {
   try {
     const { id } = req.params
-    const estudianteId = req.estudianteBDD._id
+    const estudianteId = req.user?._id
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ msg: 'ID de artículo no válido' })
@@ -815,11 +849,11 @@ export {
   recuperarPasswordEstudiante,
   comprobarTokenPasswordEstudiante,
   crearNuevoPasswordEstudiante,
-  loginEstudiante,
   perfilEstudiante,
   actualizarPerfilEstudiante,
   actualizarPasswordEstudiante,
   obtenerRedesComunitarias,
+  obtenerRedesExplorar,
   unirseARedComunitaria,
   listarRedesDelEstudiante,
   listarPublicacionesPorRed,

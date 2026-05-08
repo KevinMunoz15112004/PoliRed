@@ -1,0 +1,9 @@
+config:
+  target: "https://backendv2-as6n.onrender.com"
+  phases:
+    - duration: 60
+      arrivalRate: 10
+scenarios:
+  - flow:
+      - get:
+          url: "/api/publicaciones/listar"
