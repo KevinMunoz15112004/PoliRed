@@ -15,6 +15,7 @@ import {
   quitarGuardadoPublicacion,
   listarPublicacionesGuardadas,
   obtenerFeedPorRed,
+  obtenerRedConPublicaciones,
   crearConversacion,
   listarConversaciones,
   enviarMensajeConversacion,
@@ -37,6 +38,7 @@ const router = Router()
 router.post('/redes/solicitar-creacion', verifyToken, solicitarCreacionRed)
 router.post('/redes/unirse', verifyToken, unirseARedAprobada)
 router.post('/redes/salir', verifyToken, salirDeRedComunitaria)
+router.get('/redes/:id', verifyToken, obtenerRedConPublicaciones)
 
 router.post('/publicaciones/extendida', verifyToken, crearPublicacionExtendida)
 router.post('/publicaciones/:id/like', verifyToken, darLikePublicacion)

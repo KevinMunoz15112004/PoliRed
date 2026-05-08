@@ -424,6 +424,62 @@ const obtenerFeedPorRed = async (req, res) => {
   }
 }
 
+const obtenerRedConPublicaciones = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { page = 1, limit = 10 } = req.query
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ msg: 'ID de red no válido' })
+    }
+
+    const red = await RedComunitaria.findById(id)
+      .populate('creadaPor', 'nombre apellido email')
+      .lean()
+
+    if (!red) {
+      return res.status(404).json({ msg: 'Red no encontrada' })
+    }
+
+    // Solo mostrar redes aprobadas o redes globales
+    if (red.estadoAprobacion !== 'aprobada' && !red.esGlobal) {
+      return res.status(403).json({ msg: 'Red no disponible' })
+    }
+
+    const pageNumber = Math.max(parseInt(page, 10) || 1, 1)
+    const limitNumber = Math.min(Math.max(parseInt(limit, 10) || 10, 1), 50)
+    const skip = (pageNumber - 1) * limitNumber
+
+    const [posts, total] = await Promise.all([
+      Publicacion.find({ comunidadId: id })
+        .populate('autorId', 'nombre apellido username')
+        .populate('comunidadId', 'nombre')
+        .sort({ timestamp: -1, createdAt: -1 })
+        .skip(skip)
+        .limit(limitNumber),
+      Publicacion.countDocuments({ comunidadId: id })
+    ])
+
+    const redData = {
+      _id: red._id,
+      nombre: red.nombre,
+      descripcion: red.descripcion,
+      fotoPerfil: red.fotoPerfil,
+      cantidadMiembros: red.cantidadMiembros || (Array.isArray(red.miembros) ? red.miembros.length : 0),
+      esVerificada: red.esVerificada,
+      esOficial: red.esOficial,
+      cuentaGestion: red.cuentaGestion || null,
+      creadaPor: red.creadaPor || null,
+      estadoAprobacion: red.estadoAprobacion
+    }
+
+    return res.status(200).json({ red: redData, page: pageNumber, total, items: posts })
+  } catch (error) {
+    console.error('Error al obtener red con publicaciones:', error)
+    return res.status(500).json({ msg: 'Error en el servidor' })
+  }
+}
+
 // --- Stubs for missing features (to be implemented) ---
 
 const unirseARedAprobada = async (req, res) => {
@@ -762,6 +818,7 @@ export {
   quitarGuardadoPublicacion,
   listarPublicacionesGuardadas,
   obtenerFeedPorRed,
+  obtenerRedConPublicaciones,
   unirseARedAprobada,
   salirDeRedComunitaria,
   crearConversacion,
