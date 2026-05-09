@@ -14,7 +14,7 @@ const stripe = new Stripe(`${process.env.STRIPE_SECRET_KEY}`)
 
 const registroEstudiante = async (req, res) => {
   try {
-    const { nombre, apellido, email, password, redComunitaria, usuario } = req.body
+    const { nombre, apellido, email, password, redComunitaria } = req.body
 
     if ([nombre, apellido, email, password].some(campo => !campo)) {
       return res.status(400).json({ msg: "Lo sentimos, debes llenar todos los campos obligatorios" })
@@ -37,15 +37,7 @@ const registroEstudiante = async (req, res) => {
       return res.status(400).json({ msg: "Lo sentimos, el email ya se encuentra registrado" })
     }
 
-    // username (usuario) debe existir y ser único
-    if (!usuario || !usuario.trim()) {
-      return res.status(400).json({ msg: "Lo sentimos, debes proporcionar un usuario" })
-    }
-
-    const existeUsuario = await Estudiante.findOne({ usuario: usuario.trim() })
-    if (existeUsuario) {
-      return res.status(400).json({ msg: "Lo sentimos, el usuario ya se encuentra registrado" })
-    }
+    // username is optional at registration; frontend will set it later
 
     const verificarEmailSA = await SuperAdmin.findOne({ email })
     if (verificarEmailSA) {
@@ -62,8 +54,8 @@ const registroEstudiante = async (req, res) => {
     const nuevoEstudiante = new Estudiante({
       nombre,
       apellido,
-      usuario: usuario.trim(),
-      username: usuario.trim(),
+      // username left null initially; will be set later via /perfil/username
+      username: null,
       email,
       password,
       redComunitaria: combinado,
@@ -99,6 +91,9 @@ const registroEstudiante = async (req, res) => {
         apellido: nuevoEstudiante.apellido,
         email: nuevoEstudiante.email,
         roles: nuevoEstudiante.roles,
+        username: nuevoEstudiante.username,
+        fotoPerfil: nuevoEstudiante.fotoPerfil,
+        perfilCompleto: nuevoEstudiante.perfilCompleto,
         redComunitaria: nuevoEstudiante.redComunitaria
       }
     })
@@ -223,6 +218,84 @@ const perfilEstudiante = (req, res) => {
   return res.status(401).json({ msg: 'Usuario no autenticado' })
 }
 
+const actualizarUsername = async (req, res) => {
+  try {
+    const estudianteId = req.user?._id
+    const { username } = req.body
+
+    if (!estudianteId) return res.status(401).json({ msg: 'Usuario no autenticado' })
+    if (!username || !username.trim()) return res.status(400).json({ msg: 'Username requerido' })
+
+    const usernameTrim = username.trim()
+    if (usernameTrim.length < 3 || usernameTrim.length > 20) {
+      return res.status(400).json({ msg: 'Username debe tener entre 3 y 20 caracteres' })
+    }
+
+    const regex = /^[A-Za-z0-9._-]+$/
+    if (!regex.test(usernameTrim)) {
+      return res.status(400).json({ msg: 'Username inválido. Sólo letras, números, puntos, guiones bajos y guiones.' })
+    }
+
+    const existe = await Estudiante.findOne({ username: usernameTrim })
+    if (existe && existe._id.toString() !== estudianteId.toString()) {
+      return res.status(400).json({ msg: 'El username ya está en uso' })
+    }
+
+    const estudiante = await Estudiante.findById(estudianteId)
+    if (!estudiante) return res.status(404).json({ msg: 'Estudiante no encontrado' })
+
+    estudiante.username = usernameTrim
+    await estudiante.save()
+
+    return res.status(200).json({ msg: 'Username actualizado', username: estudiante.username })
+  } catch (error) {
+    console.error('Error al actualizar username:', error)
+    return res.status(500).json({ msg: 'Error en el servidor' })
+  }
+}
+
+const completarPerfil = async (req, res) => {
+  try {
+    const estudianteId = req.user?._id
+    const { username, fotoPerfil } = req.body
+
+    if (!estudianteId) return res.status(401).json({ msg: 'Usuario no autenticado' })
+
+    const usernameTrim = username ? String(username).trim() : ''
+    if (!usernameTrim) return res.status(400).json({ msg: 'Username requerido' })
+    if (usernameTrim.length < 3 || usernameTrim.length > 20) return res.status(400).json({ msg: 'Username debe tener entre 3 y 20 caracteres' })
+    const regex = /^[A-Za-z0-9._-]+$/
+    if (!regex.test(usernameTrim)) return res.status(400).json({ msg: 'Username inválido' })
+
+    const existe = await Estudiante.findOne({ username: usernameTrim })
+    if (existe && existe._id.toString() !== estudianteId.toString()) {
+      return res.status(400).json({ msg: 'El username ya está en uso' })
+    }
+
+    const estudiante = await Estudiante.findById(estudianteId)
+    if (!estudiante) return res.status(404).json({ msg: 'Estudiante no encontrado' })
+
+    estudiante.username = usernameTrim
+    estudiante.fotoPerfil = fotoPerfil || estudiante.fotoPerfil || null
+    estudiante.perfilCompleto = true
+    await estudiante.save()
+
+    return res.status(200).json({ msg: 'Perfil completado', usuario: {
+      _id: estudiante._id,
+      nombre: estudiante.nombre,
+      apellido: estudiante.apellido,
+      email: estudiante.email,
+      roles: estudiante.roles,
+      username: estudiante.username,
+      fotoPerfil: estudiante.fotoPerfil,
+      perfilCompleto: estudiante.perfilCompleto
+    }})
+  } catch (error) {
+    console.error('Error al completar perfil:', error)
+    return res.status(500).json({ msg: 'Error en el servidor' })
+  }
+}
+
 const actualizarPerfilEstudiante = async (req, res) => {
   const { id } = req.params;
   const { nombre, apellido, email, redComunitaria } = req.body
@@ -334,7 +407,7 @@ const obtenerRedesComunitarias = async (req, res) => {
 const obtenerRedesExplorar = async (req, res) => {
   try {
     // Solo redes marcadas como globales
-    const redes = await RedComunitaria.find({ esGlobal: true }).select('nombre descripcion cantidadMiembros esOficial esVerificada cuentaGestion')
+    const redes = await RedComunitaria.find({ esGlobal: true }).select('nombre descripcion cantidadMiembros esOficial esVerificada')
     res.status(200).json(redes)
   } catch (error) {
     console.error('Error al obtener redes para explorar:', error)
@@ -850,6 +923,8 @@ export {
   comprobarTokenPasswordEstudiante,
   crearNuevoPasswordEstudiante,
   perfilEstudiante,
+  actualizarUsername,
+  completarPerfil,
   actualizarPerfilEstudiante,
   actualizarPasswordEstudiante,
   obtenerRedesComunitarias,

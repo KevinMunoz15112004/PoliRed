@@ -26,7 +26,7 @@ loginRouter.get('/microsoft/callback',
         let baseUsuario = (user.emails?.[0]?.value || user._json.mail || '').split('@')[0] || `ms${Date.now()}`
         let usuarioFinal = baseUsuario
         let sufijo = 0
-        while (await Estudiante.findOne({ usuario: usuarioFinal })) {
+        while (await Estudiante.findOne({ username: usuarioFinal })) {
           sufijo += 1
           usuarioFinal = `${baseUsuario}${sufijo}`
         }
@@ -34,7 +34,7 @@ loginRouter.get('/microsoft/callback',
         estudianteBDD = new Estudiante({
           nombre: user.name?.givenName || user._json.givenName,
           apellido: user.name?.familyName || user._json.surname,
-          usuario: usuarioFinal,
+          username: usuarioFinal,
           email: user.emails?.[0]?.value || user._json.mail,
           roles: ['estudiante'],
           authMicrosoft: true

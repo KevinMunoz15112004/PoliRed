@@ -13,17 +13,23 @@ const estudianteSchema = new Schema({
     required: true,
     trim: true
   },
-  usuario: {
-    type: String,
-    required: true,
-    trim: true,
-    unique: true
-  },
   username: {
     type: String,
     trim: true,
     unique: true,
+    sparse: true,
+    default: null,
+    minlength: 3,
+    maxlength: 20,
+    match: [/^[A-Za-z0-9._-]+$/, 'Username inválido. Sólo letras, números, puntos, guiones bajos y guiones.']
+  },
+  fotoPerfil: {
+    type: String,
     default: null
+  },
+  perfilCompleto: {
+    type: Boolean,
+    default: false
   },
   email: {
     type: String,

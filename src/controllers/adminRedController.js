@@ -144,7 +144,14 @@ const eliminarPublicacionAdmin = async (req, res) => {
       return res.status(404).json({ msg: 'Publicación no encontrada' })
     }
 
-    if (!publicacion.comunidadId.equals(redAsignada)) {
+    // Determinar la red asignada a partir de relaciones admin (si existe)
+    const relaciones = req.adminRelations || []
+    const activa = relaciones.find(r => r.estado === 'activo')
+    const redAsignada = activa ? activa.redId : null
+
+    if (!redAsignada) return res.status(403).json({ msg: 'No tienes una red comunitaria asignada' })
+
+    if (!publicacion.comunidadId || publicacion.comunidadId.toString() !== redAsignada.toString()) {
       return res.status(403).json({ msg: 'No tienes permiso para eliminar publicaciones de esta red' })
     }
 
@@ -205,7 +212,14 @@ const eliminarArticuloAdmin = async (req, res) => {
       return res.status(404).json({ msg: 'Artículo no encontrado' })
     }
 
-    if (!articulo.redComunitaria.equals(redAsignada)) {
+    // Determinar la red asignada a partir de relaciones admin (si existe)
+    const relaciones = req.adminRelations || []
+    const activa = relaciones.find(r => r.estado === 'activo')
+    const redAsignada = activa ? activa.redId : null
+
+    if (!redAsignada) return res.status(403).json({ msg: 'No tienes una red comunitaria asignada' })
+
+    if (!articulo.redComunitaria || articulo.redComunitaria.toString() !== redAsignada.toString()) {
       return res.status(403).json({ msg: 'No tienes permiso para eliminar artículos de esta red' })
     }
 

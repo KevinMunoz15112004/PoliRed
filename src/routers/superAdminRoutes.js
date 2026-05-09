@@ -1,11 +1,8 @@
 import {Router} from 'express'
-import { comprobarTokenPassword, crearNuevoPassword, recuperarPassword, login, perfil, actualizarPerfil, actualizarAvatar, actualizarPassword, marcarRedVerificada } 
-from '../controllers/SuperAdminController.js'
-import { crearEstudiante, obtenerEstudiantes, obtenerEstudiantePorId, actualizarEstudiante, eliminarEstudiante } 
+import { comprobarTokenPassword, crearNuevoPassword, recuperarPassword, login, perfil, actualizarPerfil, actualizarAvatar, actualizarPassword, obtenerEstudiantes, obtenerEstudiantePorId, actualizarEstudiante, eliminarEstudiante, crearRed, obtenerRedes, obtenerRedPorId, actualizarRed, eliminarRed, marcarRedVerificada } 
 from '../controllers/SuperAdminController.js'
 import { listarReportesSuperAdmin, resolverReporte } from '../controllers/reportesController.js'
 import { autenticarToken, isSuperAdmin } from '../middlewares/authSuperAdmin.js'
-import { crearRed, obtenerRedes, obtenerRedPorId, actualizarRed, eliminarRed } from '../controllers/SuperAdminController.js'
 import { verificarEstadoLogin } from '../middlewares/verificarLogin.js'
 
 const router = Router()
@@ -21,7 +18,6 @@ router.put('/perfil/avatar', autenticarToken, isSuperAdmin, actualizarAvatar)
 router.put('/superadmin/actualizar-password/', autenticarToken, isSuperAdmin, actualizarPassword)
 
 //Rutas para la gestión de usuarios
-router.post('/crear-estudiantes', autenticarToken, isSuperAdmin, crearEstudiante)
 router.get('/estudiantes', autenticarToken, isSuperAdmin, obtenerEstudiantes)
 router.get('/estudiantes/:id', autenticarToken, isSuperAdmin, obtenerEstudiantePorId)
 router.put('/actualizar-estudiantes/:id', autenticarToken, isSuperAdmin, actualizarEstudiante)

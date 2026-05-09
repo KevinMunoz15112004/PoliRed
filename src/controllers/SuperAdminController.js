@@ -362,90 +362,9 @@ const perfil = (req, res) => {
 }
 
 // Gestión estudiantes
-const crearEstudiante = async (req, res) => {
-  await body("nombre")
-  .isString().withMessage("El apellido debe ser un String (texto)")
-  .bail()
-  .matches(/^(?!.*([A-Za-zÁÉÍÓÚáéíóúÑñ])\1{2,})[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$/).withMessage("El nombre no debe contener letras repetidas excesivamente, caracteres especiales ni números")
-  .bail()
-  .run(req)
-
-  await body("apellido")
-  .isString().withMessage("El apellido debe ser un String (texto)")
-  .bail()
-  .matches(/^(?!.*([A-Za-zÁÉÍÓÚáéíóúÑñ])\1{2,})[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$/).withMessage("El apellido no debe contener letras repetidas excesivamente, caracteres especiales ni números")
-  .run(req)
-
-  try {
-  const { nombre, apellido, email, password, rol, usuario, redComunitaria } = req.body;
-
-    if (!nombre || !apellido || !email || !password) {
-      return res.status(400).json({ msg: "Todos los campos obligatorios deben estar llenos" });
-    }
-
-    const existe = await Estudiante.findOne({ email });
-    if (existe) {
-      return res.status(400).json({ msg: 'El email ya está registrado' });
-    }
-
-    const redesArray = Array.isArray(redComunitaria) ? redComunitaria : [];
-
-    // Determinar usuario (username). Si no se proporciona, se genera a partir del email.
-    let usuarioFinal = usuario && usuario.trim() ? usuario.trim() : (email ? email.split('@')[0] : `user${Date.now()}`)
-    // Asegurar unicidad básica
-    let sufijo = 0
-    while (await Estudiante.findOne({ usuario: usuarioFinal })) {
-      sufijo += 1
-      usuarioFinal = `${usuarioFinal}${sufijo}`
-    }
-
-    const nuevoEstudiante = new Estudiante({
-      nombre,
-      apellido,
-      usuario: usuarioFinal,
-      username: usuarioFinal,
-      email,
-      roles: ['estudiante'],
-      redComunitaria: redesArray
-    });
-
-    nuevoEstudiante.password = await nuevoEstudiante.encrypPassword(password);
-    const token = nuevoEstudiante.crearToken();
-
-    await nuevoEstudiante.save();
-
-    for (const redId of redesArray) {
-      const red = await RedComunitaria.findById(redId);
-      if (!red) {
-        return res.status(400).json({ msg: `La red comunitaria con id ${redId} no existe` });
-      }
-      if (!red.miembros.includes(nuevoEstudiante._id)) {
-        red.miembros.push(nuevoEstudiante._id);
-        red.cantidadMiembros = red.miembros.length;
-        await red.save()
-      }
-    }
-
-    await sendMailToRegister(email, token);
-
-    res.status(201).json({
-      mensaje: 'Estudiante creado exitosamente',
-      estudiante: {
-        id: nuevoEstudiante._id,
-        nombre: nuevoEstudiante.nombre,
-        apellido: nuevoEstudiante.apellido,
-        email: nuevoEstudiante.email,
-        roles: nuevoEstudiante.roles,
-        usuario: nuevoEstudiante.usuario,
-        username: nuevoEstudiante.username,
-        redComunitaria: nuevoEstudiante.redComunitaria
-      }
-    });
-  } catch (error) {
-    console.error("Error crearEstudiante:", error);
-    res.status(500).json({ msg: error.message });
-  }
-};
+// Gestión estudiantes: la creación de estudiantes por parte del SuperAdmin
+// fue retirada por requerimiento. Las demás operaciones sobre estudiantes
+// (listar, actualizar, eliminar, etc.) permanecen.
 
 const obtenerEstudiantes = async (req, res) => {
   try {
@@ -755,12 +674,16 @@ const eliminarRed = async (req, res) => {
   }
 
   try {
-    const redEliminada = await RedComunitaria.findByIdAndDelete(id)
+    const red = await RedComunitaria.findById(id)
+    if (!red) return res.status(404).json({ msg: 'Red no encontrada' })
 
-    if (!redEliminada) {
-      return res.status(404).json({ msg: 'Red no encontrada' })
+    // Verificar si existe un admin activo en adminRedes para esta red
+    const adminActivo = await AdminRed.findOne({ redId: red._id, estado: 'activo' })
+    if (adminActivo) {
+      return res.status(400).json({ msg: 'La red tiene un administrador activo. Debe revocar el admin antes de eliminar la red.' })
     }
 
+    await RedComunitaria.findByIdAndDelete(id)
     res.json({ mensaje: 'Red eliminada correctamente' })
   } catch (error) {
     res.status(500).json({ mensaje: error.message })
@@ -799,7 +722,6 @@ export {
   actualizarPerfil,
   actualizarAvatar,
   actualizarPassword,
-  crearEstudiante,
   obtenerEstudiantes,
   obtenerEstudiantePorId,
   actualizarEstudiante,

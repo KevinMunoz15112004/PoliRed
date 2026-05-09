@@ -27,12 +27,15 @@ export const login = async (req, res) => {
 
     return res.status(200).json({
       token,
-      user: {
+      usuario: {
         _id: user._id,
         nombre: user.nombre,
         apellido: user.apellido,
         email: user.email,
-        roles: user.roles
+        roles: user.roles,
+        username: user.username || null,
+        fotoPerfil: user.fotoPerfil || null,
+        perfilCompleto: Boolean(user.perfilCompleto)
       }
     })
   } catch (error) {

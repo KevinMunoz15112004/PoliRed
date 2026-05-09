@@ -27,7 +27,6 @@ const solicitarCreacionRed = async (req, res) => {
       descripcion: descripcion.trim(),
       fotoPerfil: fotoPerfil || null,
       creadaPor: estudianteId,
-      dueno: estudianteId,
       estadoAprobacion: 'pendiente'
     })
 
@@ -468,7 +467,6 @@ const obtenerRedConPublicaciones = async (req, res) => {
       cantidadMiembros: red.cantidadMiembros || (Array.isArray(red.miembros) ? red.miembros.length : 0),
       esVerificada: red.esVerificada,
       esOficial: red.esOficial,
-      cuentaGestion: red.cuentaGestion || null,
       creadaPor: red.creadaPor || null,
       estadoAprobacion: red.estadoAprobacion
     }
@@ -556,7 +554,7 @@ const listarRedesPendientesAprobacion = async (req, res) => {
 const resolverAprobacionRed = async (req, res) => {
   try {
     const { redId } = req.params
-    const { accion = 'aprobar', adminPrincipalId = null } = req.body
+    const { accion } = req.body
 
     if (!mongoose.Types.ObjectId.isValid(redId)) {
       return res.status(400).json({ msg: 'ID de red no válido' })
@@ -571,8 +569,8 @@ const resolverAprobacionRed = async (req, res) => {
         return res.status(400).json({ msg: 'La red no está en estado pendiente' })
       }
 
-      // Encontrar al usuario creador (creadaPor o dueno)
-      const userId = red.creadaPor || red.dueno
+      // Encontrar al usuario creador (creadaPor)
+      const userId = red.creadaPor
       if (!userId) return res.status(400).json({ msg: 'La red no tiene asociado un creador' })
 
       const user = await Estudiante.findById(userId)
@@ -604,20 +602,13 @@ const resolverAprobacionRed = async (req, res) => {
         })
       }
 
-      // Actualizar red
+      // Actualizar red: marcar aprobada y asegurarse que el creador esté en miembros
       red.estadoAprobacion = 'aprobada'
-      red.dueno = user._id
-      // Añadir al creador a miembros de la red si falta
       if (!Array.isArray(red.miembros)) red.miembros = []
       if (!red.miembros.some(mid => mid.toString() === user._id.toString())) {
         red.miembros.push(user._id)
       }
       red.cantidadMiembros = red.miembros.length
-      if (adminPrincipalId && mongoose.Types.ObjectId.isValid(adminPrincipalId)) {
-        red.adminPrincipalId = adminPrincipalId
-      } else {
-        red.adminPrincipalId = user._id
-      }
       await red.save()
 
       // Notificar al creador
@@ -640,29 +631,31 @@ const resolverAprobacionRed = async (req, res) => {
     }
 
     if (accion === 'rechazar') {
-      red.estadoAprobacion = 'rechazada'
-      await red.save()
+      // Al rechazar, eliminamos la red y notificamos al creador
+      const creadoPorId = red.creadaPor
+      await red.remove()
 
-      await crearNotificacion({
-        usuarioId: red.creadaPor,
-        emisorId: req.user?._id || null,
-        tipo: 'mensaje',
-        mensaje: 'Tu solicitud de creación de red fue rechazada'
-      })
+      if (creadoPorId) {
+        await crearNotificacion({
+          usuarioId: creadoPorId,
+          emisorId: req.user?._id || null,
+          tipo: 'mensaje',
+          mensaje: 'Tu solicitud de creación de red fue rechazada'
+        })
 
-      try {
-        const creador = await Estudiante.findById(red.creadaPor)
-        if (creador && creador.email) {
-          await sendMailRedRechazada(creador.email, red.nombre)
+        try {
+          const creador = await Estudiante.findById(creadoPorId)
+          if (creador && creador.email) {
+            await sendMailRedRechazada(creador.email, red.nombre)
+          }
+        } catch (e) {
+          console.error('Error al enviar email de red rechazada:', e)
         }
-      } catch (e) {
-        console.error('Error al enviar email de red rechazada:', e)
       }
 
-      return res.status(200).json({ msg: 'Red rechazada', red })
+      return res.status(200).json({ msg: 'Red rechazada y eliminada' })
     }
-
-    return res.status(400).json({ msg: 'Acción no válida' })
+    return res.status(400).json({ msg: 'Acción no válida. Debe ser "aprobar" o "rechazar"' })
   } catch (error) {
     console.error('Error al resolver aprobación de red:', error)
     return res.status(500).json({ msg: 'Error en el servidor' })
@@ -698,11 +691,10 @@ const revocarAdminRed = async (req, res) => {
       await user.save()
     }
 
-    // Si era dueño de la red, quitar la relación de dueño
-    const wasOwner = red.dueno && red.dueno.toString() === user._id.toString()
-    if (wasOwner) {
-      red.dueno = null
-      red.adminPrincipalId = null
+    // Si la red tenía creadaPor apuntando a este admin, quitarla
+    const wasCreator = red.creadaPor && red.creadaPor.toString() === user._id.toString()
+    if (wasCreator) {
+      red.creadaPor = null
       await red.save()
     }
 
@@ -734,7 +726,7 @@ const asignarDuenoRed = async (req, res) => {
     const red = await RedComunitaria.findById(redId)
     if (!red) return res.status(404).json({ msg: 'Red no encontrada' })
 
-    if (red.dueno) return res.status(400).json({ msg: 'La red ya tiene un dueño asignado' })
+    if (red.creadaPor) return res.status(400).json({ msg: 'La red ya tiene un administrador asignado' })
 
     const user = await Estudiante.findById(usuarioId)
     if (!user) return res.status(404).json({ msg: 'Usuario no encontrado' })
@@ -772,9 +764,8 @@ const asignarDuenoRed = async (req, res) => {
       }
     }
 
-    // Asignar como dueño y adminPrincipalId
-    red.dueno = user._id
-    red.adminPrincipalId = user._id
+    // Asignar como administrador (creadaPor)
+    red.creadaPor = user._id
     if (!Array.isArray(red.miembros)) red.miembros = []
     if (!red.miembros.some(mid => mid.toString() === user._id.toString())) red.miembros.push(user._id)
     red.cantidadMiembros = red.miembros.length

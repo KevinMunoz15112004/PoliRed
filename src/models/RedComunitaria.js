@@ -38,31 +38,7 @@ const redComunitariaSchema = new mongoose.Schema({
   },
   // Referencia al AdminRed que gestiona la red (cuenta web)
   // ownerAdmin se mantiene por compatibilidad (referencia antigua a AdminRed)
-  ownerAdmin: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'AdminRed',
-    default: null
-  },
-  // adminPrincipalId: referencia al usuario real (Estudiante) que actúa como admin principal
-  adminPrincipalId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Estudiante',
-    default: null
-  },
-  dueno: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Estudiante',
-    default: null
-  },
-  // Información mínima de la cuenta de gestión para consumo en frontend
-  cuentaGestion: {
-    nombre: { type: String, default: null },
-    apellido: { type: String, default: null },
-    email: { type: String, default: null },
-    celular: { type: String, default: null },
-    avatar: { type: String, default: null },
-    rol: { type: String, default: 'Admin_Red' }
-  },
+  // Nota: `creadaPor` es el único campo que indica quién creó/la administra la red.
   estadoAprobacion: {
     type: String,
     enum: ['pendiente', 'aprobada', 'rechazada'],
@@ -72,22 +48,6 @@ const redComunitariaSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
-  solicitudesUnion: [{
-    estudianteId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Estudiante',
-      required: true
-    },
-    estado: {
-      type: String,
-      enum: ['pendiente', 'aprobada', 'rechazada'],
-      default: 'pendiente'
-    },
-    fechaSolicitud: {
-      type: Date,
-      default: Date.now
-    }
-  }],
   cantidadMiembros: {
     type: Number,
     default: 0
