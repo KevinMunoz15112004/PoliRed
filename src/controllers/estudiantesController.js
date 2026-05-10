@@ -883,6 +883,49 @@ const obtenerEstudiantes = async (req, res) => {
     res.status(500).json({ msg: 'Error al obtener estudiantes' });
   }
 }
+// Obtener perfil de una red (datos + publicaciones paginadas)
+const obtenerPerfilRed = async (req, res) => {
+  try {
+    const { redId } = req.params
+    const { page = 1, limit = 12 } = req.query
+
+    const red = await RedComunitaria.findById(redId).select('nombre descripcion cantidadMiembros fotoPerfil esOficial esVerificada creadaPor')
+    if (!red) return res.status(404).json({ msg: 'Red comunitaria no encontrada' })
+
+    const pageNumber = Math.max(parseInt(page, 10) || 1, 1)
+    const limitNumber = Math.min(Math.max(parseInt(limit, 10) || 12, 1), 50)
+    const skip = (pageNumber - 1) * limitNumber
+
+    const [items, total] = await Promise.all([
+      Publicacion.find({ comunidadId: redId })
+        .populate('autorId', 'nombre apellido username fotoPerfil')
+        .populate('comunidadId', 'nombre')
+        .sort({ timestamp: -1, createdAt: -1 })
+        .skip(skip)
+        .limit(limitNumber),
+      Publicacion.countDocuments({ comunidadId: redId })
+    ])
+
+    return res.status(200).json({
+      red: {
+        id: red._id,
+        nombre: red.nombre,
+        descripcion: red.descripcion,
+        cantidadMiembros: red.cantidadMiembros,
+        fotoPerfil: red.fotoPerfil,
+        esOficial: red.esOficial,
+        esVerificada: red.esVerificada,
+        creadaPor: red.creadaPor
+      },
+      page: pageNumber,
+      total,
+      items
+    })
+  } catch (error) {
+    console.error('Error al obtener perfil de la red:', error)
+    return res.status(500).json({ msg: 'Error en el servidor' })
+  }
+}
 
 export {
   registroEstudiante,
@@ -897,6 +940,7 @@ export {
   actualizarPasswordEstudiante,
   obtenerRedesComunitarias,
   obtenerRedesExplorar,
+  obtenerPerfilRed,
   unirseARedComunitaria,
   listarRedesDelEstudiante,
   listarPublicacionesPorRed,

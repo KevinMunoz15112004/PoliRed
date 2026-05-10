@@ -3,6 +3,7 @@ import Publicacion from '../models/Publicaciones.js'
 import ReportePublicacion from '../models/ReportePublicacion.js'
 import ReporteUsuario from '../models/ReporteUsuario.js'
 import ReporteApp from '../models/ReporteApp.js'
+import Estudiante from '../models/Estudiantes.js'
 
 // Crear reporte sobre una publicación (llega al admin de la red correspondiente)
 const crearReportePublicacion = async (req, res) => {
@@ -58,6 +59,11 @@ const crearReporteApp = async (req, res) => {
 const crearReporteUsuario = async (req, res) => {
   try {
     const { tipo, descripcion, reportadoUsuarioId, archivos = [] } = req.body
+
+    // verificar que el usuario reportado exista
+    if (!reportadoUsuarioId) return res.status(400).json({ msg: 'Falta reportadoUsuarioId' })
+    const usuarioReportado = await Estudiante.findById(reportadoUsuarioId)
+    if (!usuarioReportado) return res.status(404).json({ msg: 'Usuario reportado no encontrado' })
 
     const nuevoReporte = await ReporteUsuario.create({
       tipo,

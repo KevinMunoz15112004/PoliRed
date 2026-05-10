@@ -1,5 +1,5 @@
 import {Router} from 'express'
-import { registroEstudiante, confirmarMailEstudiante, comprobarTokenPasswordEstudiante, recuperarPasswordEstudiante, crearNuevoPasswordEstudiante, perfilEstudiante, actualizarUsername, completarPerfil, actualizarPerfilEstudiante, actualizarPasswordEstudiante, crearPublicacion, unirseARedComunitaria, listarPublicaciones, listarRedesDelEstudiante, listarPublicacionesPorRed, listarPublicacionesGlobal, listarPublicacionesComunidades, obtenerRedesComunitarias, obtenerRedesExplorar, publicarArticulo, listarArticulosPorRed, eliminarArticulo, actualizarArticulo, actualizarPublicacion, eliminarPublicacion, comprarArticulo, listarTodosArticulos, obtenerEstudiantes } 
+import { registroEstudiante, confirmarMailEstudiante, comprobarTokenPasswordEstudiante, recuperarPasswordEstudiante, crearNuevoPasswordEstudiante, perfilEstudiante, actualizarUsername, completarPerfil, actualizarPerfilEstudiante, actualizarPasswordEstudiante, crearPublicacion, unirseARedComunitaria, listarPublicaciones, listarRedesDelEstudiante, listarPublicacionesPorRed, listarPublicacionesGlobal, listarPublicacionesComunidades, obtenerRedesComunitarias, obtenerRedesExplorar, obtenerPerfilRed, publicarArticulo, listarArticulosPorRed, eliminarArticulo, actualizarArticulo, actualizarPublicacion, eliminarPublicacion, comprarArticulo, listarTodosArticulos, obtenerEstudiantes } 
 from '../controllers/estudiantesController.js'
 import { requirePerfilCompleto } from '../middlewares/checkPerfilCompleto.js'
 import { verifyToken } from '../middlewares/auth.js'
@@ -38,6 +38,7 @@ router.get('/redes/listar', verifyToken, obtenerRedesComunitarias)
 
 // Obtener publicaciones solo de la red global
 router.get('/redes/explorar', obtenerRedesExplorar)
+router.get('/redes/:redId', verifyToken, validators.mongoIdParam('redId'), validateResult, obtenerPerfilRed)
 router.get('/publicaciones/global', listarPublicacionesGlobal)
 router.get('/publicaciones/comunitarias', listarPublicacionesComunidades)
 
