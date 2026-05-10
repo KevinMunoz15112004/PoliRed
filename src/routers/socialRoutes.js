@@ -16,8 +16,6 @@ import {
   guardarPublicacion,
   quitarGuardadoPublicacion,
   listarPublicacionesGuardadas,
-  obtenerFeedPorRed,
-  obtenerRedConPublicaciones,
   crearConversacion,
   listarConversaciones,
   enviarMensajeConversacion,
@@ -41,7 +39,6 @@ const router = Router()
 router.post('/redes/solicitar-creacion', verifyToken, validators.title('nombre'), validators.description('descripcion'), validateResult, solicitarCreacionRed)
 router.post('/redes/unirse', verifyToken, validators.mongoIdBody('redId'), validateResult, unirseARedAprobada)
 router.post('/redes/salir', verifyToken, validators.mongoIdBody('redId'), validateResult, salirDeRedComunitaria)
-router.get('/redes/:id', verifyToken, validators.mongoIdParam('id'), validateResult, obtenerRedConPublicaciones)
 
 router.post('/publicaciones/extendida', verifyToken, requirePerfilCompleto, crearPublicacionExtendida)
 router.post('/publicaciones/:id/like', verifyToken, requirePerfilCompleto, validators.mongoIdParam('id'), validateResult, darLikePublicacion)
@@ -55,7 +52,7 @@ router.post('/publicaciones/:id/guardar', verifyToken, requirePerfilCompleto, va
 router.delete('/publicaciones/:id/guardar', verifyToken, requirePerfilCompleto, validators.mongoIdParam('id'), validateResult, quitarGuardadoPublicacion)
 router.get('/usuarios/guardados', verifyToken, listarPublicacionesGuardadas)
 
-router.get('/feed', verifyToken, obtenerFeedPorRed)
+// Note: feed and per-red feed endpoints consolidated in estudiantesRoutes
 
 router.post('/mensajes/conversaciones', verifyToken, requirePerfilCompleto, crearConversacion)
 router.get('/mensajes/conversaciones', verifyToken, listarConversaciones)

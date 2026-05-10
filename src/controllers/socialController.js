@@ -370,114 +370,7 @@ const listarPublicacionesGuardadas = async (req, res) => {
   }
 }
 
-const obtenerFeedPorRed = async (req, res) => {
-  try {
-    const { redId, page = 1, limit = 10 } = req.query
-
-    const pageNumber = Math.max(parseInt(page, 10) || 1, 1)
-    const limitNumber = Math.min(Math.max(parseInt(limit, 10) || 10, 1), 50)
-    const skip = (pageNumber - 1) * limitNumber
-
-    // Si se pasa redId, devolver el feed de esa red
-    if (redId) {
-      if (!mongoose.Types.ObjectId.isValid(redId)) {
-        return res.status(400).json({ msg: 'ID de red no válido' })
-      }
-
-      const [items, total] = await Promise.all([
-        Publicacion.find({ comunidadId: redId })
-          .populate('autorId', 'nombre apellido')
-          .populate('comunidadId', 'nombre')
-          .populate('likes', 'nombre apellido')
-          .sort({ timestamp: -1, createdAt: -1 })
-          .skip(skip)
-          .limit(limitNumber),
-        Publicacion.countDocuments({ comunidadId: redId })
-      ])
-
-      return res.status(200).json({
-        page: pageNumber,
-        total,
-        items
-      })
-    }
-
-    // Si no hay redId, devolver feed global o filtrado por seguimiento
-    const [items, total] = await Promise.all([
-      Publicacion.find()
-        .populate('autorId', 'nombre apellido')
-        .populate('comunidadId', 'nombre')
-        .populate('likes', 'nombre apellido')
-        .sort({ timestamp: -1, createdAt: -1 })
-        .skip(skip)
-        .limit(limitNumber),
-      Publicacion.countDocuments()
-    ])
-
-    return res.status(200).json({
-      page: pageNumber,
-      total,
-      items
-    })
-  } catch (error) {
-    console.error('Error al obtener feed:', error)
-    return res.status(500).json({ msg: 'Error en el servidor' })
-  }
-}
-
-const obtenerRedConPublicaciones = async (req, res) => {
-  try {
-    const { id } = req.params
-    const { page = 1, limit = 10 } = req.query
-
-    // ID validado por validators en rutas
-
-    const red = await RedComunitaria.findById(id)
-      .populate('creadaPor', 'nombre apellido email')
-      .lean()
-
-    if (!red) {
-      return res.status(404).json({ msg: 'Red no encontrada' })
-    }
-
-    // Solo mostrar redes aprobadas o redes globales
-    if (red.estadoAprobacion !== 'aprobada' && !red.esGlobal) {
-      return res.status(403).json({ msg: 'Red no disponible' })
-    }
-
-    const pageNumber = Math.max(parseInt(page, 10) || 1, 1)
-    const limitNumber = Math.min(Math.max(parseInt(limit, 10) || 10, 1), 50)
-    const skip = (pageNumber - 1) * limitNumber
-
-    const [posts, total] = await Promise.all([
-      Publicacion.find({ comunidadId: id })
-        .populate('autorId', 'nombre apellido username')
-        .populate('comunidadId', 'nombre')
-        .populate('likes', 'nombre apellido')
-        .sort({ timestamp: -1, createdAt: -1 })
-        .skip(skip)
-        .limit(limitNumber),
-      Publicacion.countDocuments({ comunidadId: id })
-    ])
-
-    const redData = {
-      _id: red._id,
-      nombre: red.nombre,
-      descripcion: red.descripcion,
-      fotoPerfil: red.fotoPerfil,
-      cantidadMiembros: red.cantidadMiembros || (Array.isArray(red.miembros) ? red.miembros.length : 0),
-      esVerificada: red.esVerificada,
-      esOficial: red.esOficial,
-      creadaPor: red.creadaPor || null,
-      estadoAprobacion: red.estadoAprobacion
-    }
-
-    return res.status(200).json({ red: redData, page: pageNumber, total, items: posts })
-  } catch (error) {
-    console.error('Error al obtener red con publicaciones:', error)
-    return res.status(500).json({ msg: 'Error en el servidor' })
-  }
-}
+// Note: feed and per-red feed listing consolidated into `estudiantesController`.
 
 // --- Stubs for missing features (to be implemented) ---
 
@@ -803,8 +696,6 @@ export {
   guardarPublicacion,
   quitarGuardadoPublicacion,
   listarPublicacionesGuardadas,
-  obtenerFeedPorRed,
-  obtenerRedConPublicaciones,
   unirseARedAprobada,
   salirDeRedComunitaria,
   crearConversacion,

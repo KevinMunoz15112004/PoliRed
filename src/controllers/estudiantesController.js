@@ -604,6 +604,66 @@ const listarPublicacionesPorRed = async (req, res) => {
   }
 }
 
+const listarPublicacionesGlobal = async (req, res) => {
+  try {
+    const { page = 1, limit = 10 } = req.query
+
+    const redGlobal = await RedComunitaria.findOne({ esGlobal: true })
+    if (!redGlobal) return res.status(404).json({ msg: 'No hay red global configurada' })
+
+    const pageNumber = Math.max(parseInt(page, 10) || 1, 1)
+    const limitNumber = Math.min(Math.max(parseInt(limit, 10) || 10, 1), 50)
+    const skip = (pageNumber - 1) * limitNumber
+
+    const [items, total] = await Promise.all([
+      Publicacion.find({ comunidadId: redGlobal._id })
+        .populate('autorId', 'nombre apellido username')
+        .populate('comunidadId', 'nombre')
+        .sort({ timestamp: -1, createdAt: -1 })
+        .skip(skip)
+        .limit(limitNumber),
+      Publicacion.countDocuments({ comunidadId: redGlobal._id })
+    ])
+
+    return res.status(200).json({ redId: redGlobal._id, page: pageNumber, total, items })
+  } catch (error) {
+    console.error('Error al listar publicaciones globales:', error)
+    return res.status(500).json({ msg: 'Error en el servidor' })
+  }
+}
+
+const listarPublicacionesComunidades = async (req, res) => {
+  try {
+    const { page = 1, limit = 10 } = req.query
+
+    const comunidades = await RedComunitaria.find({ esGlobal: { $ne: true } }).select('_id')
+    const comunidadIds = comunidades.map(c => c._id)
+
+    const pageNumber = Math.max(parseInt(page, 10) || 1, 1)
+    const limitNumber = Math.min(Math.max(parseInt(limit, 10) || 10, 1), 50)
+    const skip = (pageNumber - 1) * limitNumber
+
+    if (comunidadIds.length === 0) {
+      return res.status(200).json({ page: pageNumber, total: 0, items: [] })
+    }
+
+    const [items, total] = await Promise.all([
+      Publicacion.find({ comunidadId: { $in: comunidadIds } })
+        .populate('autorId', 'nombre apellido username')
+        .populate('comunidadId', 'nombre')
+        .sort({ timestamp: -1, createdAt: -1 })
+        .skip(skip)
+        .limit(limitNumber),
+      Publicacion.countDocuments({ comunidadId: { $in: comunidadIds } })
+    ])
+
+    return res.status(200).json({ page: pageNumber, total, items })
+  } catch (error) {
+    console.error('Error al listar publicaciones de comunidades:', error)
+    return res.status(500).json({ msg: 'Error en el servidor' })
+  }
+}
+
 const publicarArticulo = async (req, res) => {
   try {
     const { titulo, descripcion, precio, comunidadId, imagen } = req.body
@@ -840,6 +900,8 @@ export {
   unirseARedComunitaria,
   listarRedesDelEstudiante,
   listarPublicacionesPorRed,
+  listarPublicacionesGlobal,
+  listarPublicacionesComunidades,
   crearPublicacion,
   actualizarPublicacion,
   eliminarPublicacion,

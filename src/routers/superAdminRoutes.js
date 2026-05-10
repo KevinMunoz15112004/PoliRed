@@ -15,25 +15,25 @@ router.get('/recuperar-password/:token', validators.tokenParam('token'), validat
 router.post('/nuevo-password/:token', validators.crearNuevoPasswordValidator, validateResult, crearNuevoPassword)
 router.post('/login', verificarEstadoLogin, validators.loginValidator, validateResult, login)
 router.get('/perfil-superadmin', autenticarToken, isSuperAdmin, perfil)
-router.put('/actualizar-superadmin/', autenticarToken, isSuperAdmin,
+router.patch('/actualizar-superadmin/', autenticarToken, isSuperAdmin,
 	validators.actualizarPerfilValidator,
 	validators.phone('celular', { optional: true }),
 	validateResult,
 	actualizarPerfil)
-router.put('/perfil/avatar', autenticarToken, isSuperAdmin, actualizarAvatar)
-router.put('/superadmin/actualizar-password/', autenticarToken, isSuperAdmin, validators.actualizarPasswordValidator, validateResult, actualizarPassword)
+router.patch('/perfil/avatar', autenticarToken, isSuperAdmin, actualizarAvatar)
+router.patch('/superadmin/actualizar-password/', autenticarToken, isSuperAdmin, validators.actualizarPasswordValidator, validateResult, actualizarPassword)
 
 //Rutas para la gestión de usuarios
 router.get('/estudiantes', autenticarToken, isSuperAdmin, obtenerEstudiantes)
 router.get('/estudiantes/:id', autenticarToken, isSuperAdmin, validators.mongoIdParam('id'), validateResult, obtenerEstudiantePorId)
-router.put('/actualizar-estudiantes/:id', autenticarToken, isSuperAdmin, validators.mongoIdParam('id'), validateResult, actualizarEstudiante)
+router.patch('/actualizar-estudiantes/:id', autenticarToken, isSuperAdmin, validators.mongoIdParam('id'), validateResult, actualizarEstudiante)
 router.delete('/eliminar-estudiantes/:id', autenticarToken, isSuperAdmin, validators.mongoIdParam('id'), validateResult, eliminarEstudiante)
 
 //Rutas para la gestión de redes comunitarias
 router.post('/crear-red', autenticarToken, isSuperAdmin, validators.title('nombre'), validators.description('descripcion', { optional: true }), validateResult, crearRed)
 router.get('/redes', autenticarToken, isSuperAdmin, obtenerRedes)
 router.get('/red/:id', autenticarToken, isSuperAdmin, validators.mongoIdParam('id'), validateResult, obtenerRedPorId)
-router.put('/actualizar-red/:id', autenticarToken, isSuperAdmin, validators.mongoIdParam('id'), validators.title('nombre', { optional: true }), validators.description('descripcion', { optional: true }), validateResult, actualizarRed)
+router.patch('/actualizar-red/:id', autenticarToken, isSuperAdmin, validators.mongoIdParam('id'), validators.title('nombre', { optional: true }), validators.description('descripcion', { optional: true }), validateResult, actualizarRed)
 router.delete('/eliminar-red/:id', autenticarToken, isSuperAdmin, validators.mongoIdParam('id'), validateResult, eliminarRed)
 // Marcar red como verificada (SuperAdmin)
 router.patch('/red/:id/verificada', autenticarToken, isSuperAdmin, validators.mongoIdParam('id'), validators.booleanBody('verificada', { optional: true }), validateResult, marcarRedVerificada)

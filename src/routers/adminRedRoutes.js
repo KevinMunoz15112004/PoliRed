@@ -8,10 +8,10 @@ import validateResult from '../validators/validateResult.js'
 const router = Router()
 
 //Rutas para la gestión de la cuenta (login moved to /api/auth/login)
-router.put('/perfil/avatar/admin-red', verifyToken, requireRole('admin_red'), actualizarAvatarAdminRed)
+router.patch('/perfil/avatar/admin-red', verifyToken, requireRole('admin_red'), actualizarAvatarAdminRed)
 router.get('/perfil/admin-red', verifyToken, requireRole('admin_red'), perfilAdminRed)
-router.put('/perfil/admin-red/actualizar', verifyToken, requireRole('admin_red'), validators.actualizarPerfilValidator, validateResult, actualizarPerfilAdminRed)
-router.put('/perfil/admin-red/actualizar/password', verifyToken, requireRole('admin_red'), validators.actualizarPasswordValidator, validateResult, actualizarPasswordAdminRed)
+router.patch('/perfil/admin-red/actualizar', verifyToken, requireRole('admin_red'), validators.actualizarPerfilValidator, validateResult, actualizarPerfilAdminRed)
+router.patch('/perfil/admin-red/actualizar/password', verifyToken, requireRole('admin_red'), validators.actualizarPasswordValidator, validateResult, actualizarPasswordAdminRed)
 
 //Rutas para la gestión de publicaciones
 router.get('/publicaciones/listar/admin', verifyToken, requireRole('admin_red'), listarPublicaciones)
@@ -21,7 +21,7 @@ router.delete('/publicaciones/admin/articulo/eliminar/:id', verifyToken, require
 
 //Rutas para la gestión de redes comunitarias
 router.get('/red/admin/informacion', verifyToken, requireRole('admin_red'), obtenerInfoRed)
-router.put('/admin/actualizar/red', verifyToken, requireRole('admin_red'), actualizarRedComunitaria)
+router.patch('/admin/actualizar/red', verifyToken, requireRole('admin_red'), actualizarRedComunitaria)
 router.get('/admin/estudiantes/listar', verifyToken, requireRole('admin_red'), verEstudiantesDeRed)
 router.delete('/admin/estudiantes/eliminar/:estudianteId', verifyToken, requireRole('admin_red'), validators.mongoIdParam('estudianteId'), validateResult, eliminarEstudianteDeRed)
 
