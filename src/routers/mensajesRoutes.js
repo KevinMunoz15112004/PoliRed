@@ -5,8 +5,10 @@ import mongoose from 'mongoose';
 import Estudiantes from '../models/Estudiantes.js';
 
 const router = express.Router();
+import validators from '../validators/index.js'
+import validateResult from '../validators/validateResult.js'
 
-router.get('/mensajes/historial/:estudianteA/:estudianteB', verifyToken, async (req, res) => {
+router.get('/mensajes/historial/:estudianteA/:estudianteB', verifyToken, validators.mongoIdParam('estudianteA'), validators.mongoIdParam('estudianteB'), validateResult, async (req, res) => {
   const { estudianteA, estudianteB } = req.params;
 
   if (!mongoose.Types.ObjectId.isValid(estudianteA) || !mongoose.Types.ObjectId.isValid(estudianteB)) {

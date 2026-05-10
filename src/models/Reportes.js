@@ -3,15 +3,26 @@ import { Schema, model } from 'mongoose'
 const reporteSchema = new Schema({
   tipo: {
     type: String,
-    enum: ['bug', 'red', 'otro'],
     default: 'otro'
   },
   descripcion: {
     type: String,
-    required: true,
-    trim: true
+    trim: true,
+    default: ''
   },
   usuarioId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Estudiante',
+    default: null
+  },
+  // If reporting a publication within a community
+  publicacionId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Publicacion',
+    default: null
+  },
+  // If reporting a user
+  reportadoUsuarioId: {
     type: Schema.Types.ObjectId,
     ref: 'Estudiante',
     default: null

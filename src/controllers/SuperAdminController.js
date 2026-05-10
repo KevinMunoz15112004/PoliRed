@@ -7,30 +7,11 @@ import fs from "fs-extra"
 import AdminRed from '../models/adminRedes.js'
 import { sendMailToRecoveryPassword, sendMailToRegister, enviarCorreoNuevoAdmin } from "../config/nodemailer.js"
 import { crearTokenJWT } from "../middlewares/authSuperAdmin.js"
-import { body, param, validationResult } from "express-validator"
+// Validation is handled by centralized validators in src/validators/
 
 //Controladores para la gestión de la cuenta
 const login = async (req, res) => {
-  await body("email")
-    .exists().withMessage("El email es obligatorio")
-    .bail()
-    .isString().withMessage("El email debe ser un String (texto)")
-    .bail()
-    .isEmail().withMessage("El email no tiene un formato válido")
-    .run(req),
-
-    await body("password")
-      .exists().withMessage("La contraseña es obligatoria")
-      .bail()
-      .isString().withMessage("La contraseña debe ser un String (texto)")
-      .bail()
-      .notEmpty().withMessage("La contraseña no puede estar vacía")
-      .run(req)
-
-  const errors = validationResult(req)
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() })
-  }
+  // Request format validation moved to centralized validators (routes)
 
   try {
     const { email, password } = req.body
@@ -70,20 +51,7 @@ const login = async (req, res) => {
 }
 
 const recuperarPassword = async (req, res) => {
-  await body("email")
-    .exists().withMessage("El email es obligatorio")
-    .bail()
-    .isString().withMessage("El email debe ser un String (texto)")
-    .bail()
-    .notEmpty().withMessage("El email no puede estar vacío")
-    .bail()
-    .isEmail().withMessage("El email no tiene un formato válido")
-    .run(req)
-
-  const errors = validationResult(req)
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() })
-  }
+  // Request format validation moved to centralized validators (routes)
 
   try {
     const { email } = req.body;
@@ -107,18 +75,7 @@ const recuperarPassword = async (req, res) => {
 }
 
 const comprobarTokenPassword = async (req, res) => {
-  await param("token")
-    .exists().withMessage("El token es obligatorio")
-    .bail()
-    .isString().withMessage("El token debe ser un String (texto)")
-    .bail()
-    .notEmpty().withMessage("El token no puede estar vacío")
-    .run(req)
-
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() })
-  }
+  // Token param validation is handled by centralized validators in routes
 
   try {
     const { token } = req.params
@@ -136,48 +93,12 @@ const comprobarTokenPassword = async (req, res) => {
 }
 
 const crearNuevoPassword = async (req, res) => {
-  await body("password")
-    .exists().withMessage("La contraseña es obligatoria")
-    .bail()
-    .isString().withMessage("La contraseña debe ser un String (texto)")
-    .bail()
-    .notEmpty().withMessage("La contraseña no puede estar vacía")
-    .bail()
-    .isLength({ min: 8 }).withMessage("La contraseña debe tener al menos 8 caracteres")
-    .run(req),
-
-    await body("confirmpassword")
-      .exists().withMessage("Debes confirmar la contraseña")
-      .bail()
-      .isString().withMessage("La confirmación debe ser un String (texto)")
-      .bail()
-      .notEmpty().withMessage("La confirmación no puede estar vacía")
-      .run(req),
-
-    await param("token")
-      .exists().withMessage("El token es obligatorio")
-      .bail()
-      .isString().withMessage("El token debe ser un String (texto)")
-      .bail()
-      .notEmpty().withMessage("El token no puede estar vacío")
-      .run(req)
-
-  const errors = validationResult(req)
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() })
-  }
+  // Validation for passwords and token moved to centralized validators (routes)
 
   try {
     const { password, confirmpassword } = req.body  
     const { token } = req.params
 
-    if (Object.values(req.body).includes("")) {
-      return res.status(404).json({ msg: "Lo sentimos, debes llenar todos los campos" })
-    }
-
-    if (password !== confirmpassword) {
-      return res.status(404).json({ msg: "Lo sentimos, los contraseñas no coinciden" })
-    }
 
     const superAdminBDD = await SuperAdmin.findOne({ token })
     if (!superAdminBDD || superAdminBDD.token !== token) {
@@ -197,45 +118,7 @@ const crearNuevoPassword = async (req, res) => {
 }
 
 const actualizarPerfil = async (req, res) => {
-  await body("nombre")
-    .optional()
-    .isString().withMessage("El nombre debe ser un String (texto)")
-    .bail()
-    .matches(/^(?!.*([A-Za-zÁÉÍÓÚáéíóúÑñ])\1{2,})[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$/).withMessage("El nombre no debe contener letras repetidas excesivamente, caracteres especiales ni números")
-    .run(req)
-
-  await body("apellido")
-    .optional()
-    .isString().withMessage("El apellido debe ser un String (texto)")
-    .bail()
-    .matches(/^(?!.*([A-Za-zÁÉÍÓÚáéíóúÑñ])\1{2,})[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$/).withMessage("El apellido no debe contener letras repetidas excesivamente, caracteres especiales ni números")
-    .run(req)
-
-  await body("direccion")
-    .optional()
-    .isString().withMessage("La dirección debe ser un texto")
-    .bail()
-    .notEmpty().withMessage("La dirección no puede estar vacía")
-    .run(req)
-
-  await body("celular")
-    .optional()
-    .isNumeric().withMessage("El celular solo puede contener números")
-    .bail()
-    .isLength({ min: 10, max: 10 }).withMessage("El celular debe tener 10 dígitos")
-    .run(req)
-
-  await body("email")
-    .optional()
-    .isString().withMessage("El email debe ser un texto")
-    .bail()
-    .isEmail().withMessage("El email no tiene un formato válido")
-    .run(req)
-
-  const errors = validationResult(req)
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() })
-  }
+  // Request format validation moved to centralized validators (routes)
 
   try {
     const id = req.user._id;
@@ -311,24 +194,7 @@ const actualizarAvatar = async (req, res) => {
 }
 
 const actualizarPassword = async (req, res) => {
-  await body("passwordactual")
-    .exists().withMessage("Debe completar todos los campos")
-    .bail()
-    .isString().withMessage("La contraseña actual debe ser un String (texto)")
-    .run(req),
-
-  await body("passwordnuevo")
-    .exists().withMessage("Debe completar todos los campos")
-    .bail()
-    .isString().withMessage("La nueva contraseña debe ser un String (texto)")
-    .bail()
-    .isLength({ min: 8 }).withMessage("La nueva contraseña debe tener al menos 8 caracteres")
-    .run(req)
-
-  const errors = validationResult(req)
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() })
-  }
+  // Request format validation moved to centralized validators (routes)
 
   try {
     const id = req.user._id
@@ -380,10 +246,7 @@ const obtenerEstudiantes = async (req, res) => {
 
 const obtenerEstudiantePorId = async (req, res) => {
   const id = req.params.id
-
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    return res.status(400).json({ msg: 'ID no válido' })
-  }
+  // ID validado por validators en rutas
 
   try {
     const estudiante = await Estudiante.findById(id)
@@ -400,10 +263,7 @@ const obtenerEstudiantePorId = async (req, res) => {
 
 const actualizarEstudiante = async (req, res) => {
   const id = req.params.id;
-
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    return res.status(400).json({ msg: 'ID no válido' });
-  }
+  // ID validado por validators en rutas
 
   try {
     const estudiante = await Estudiante.findById(id);
@@ -550,10 +410,7 @@ const actualizarEstudiante = async (req, res) => {
 
 const eliminarEstudiante = async (req, res) => {
   const id = req.params.id
-
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    return res.status(400).json({ msg: "ID no válido" })
-  }
+  // ID validado por validators en rutas
 
   try {
     const estudianteEliminado = await Estudiante.findByIdAndDelete(id)
@@ -600,10 +457,7 @@ const obtenerRedes = async (req, res) => {
 
 const obtenerRedPorId = async (req, res) => {
   const id = req.params.id;
-
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    return res.status(400).json({ msg: 'ID no válido' });
-  }
+  // ID validado por validators en rutas
 
   try {
     const red = await RedComunitaria.findById(id).populate('miembros', 'nombre apellido email');
@@ -620,10 +474,7 @@ const obtenerRedPorId = async (req, res) => {
 
 const actualizarRed = async (req, res) => {
   const id = req.params.id;
-
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    return res.status(400).json({ msg: "ID no válido" })
-  }
+  // ID validado por validators en rutas
 
   try {
     const redExistente = await RedComunitaria.findById(id)
@@ -668,10 +519,7 @@ const actualizarRed = async (req, res) => {
 
 const eliminarRed = async (req, res) => {
   const id = req.params.id
-
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    return res.status(400).json({ msg: 'ID no válido' })
-  }
+  // ID validado por validators en rutas
 
   try {
     const red = await RedComunitaria.findById(id)
@@ -693,10 +541,7 @@ const eliminarRed = async (req, res) => {
 const marcarRedVerificada = async (req, res) => {
   try {
     const id = req.params.id
-
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ msg: 'ID no válido' })
-    }
+    // ID validado por validators en rutas
 
     const { verificada = true } = req.body
 

@@ -49,8 +49,7 @@ const actualizarPerfilAdminRed = async (req, res) => {
 const actualizarPasswordAdminRed = async (req, res) => {
   const id = req.user._id
   const { passwordactual, passwordnuevo } = req.body
-
-  if (!passwordactual || !passwordnuevo) return res.status(400).json({ msg: "Campos obligatorios" })
+  // Formato/presencia de los campos de contraseña validado por validators en rutas
 
   const estudianteBDD = await Estudiante.findById(id)
   if (!estudianteBDD) return res.status(404).json({ msg: 'Usuario no encontrado' })
@@ -135,9 +134,7 @@ const eliminarPublicacionAdmin = async (req, res) => {
       return res.status(403).json({ msg: 'Acceso no autorizado. Solo administradores de red pueden eliminar publicaciones.' })
     }
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ msg: 'ID de publicación no válido' })
-    }
+    // ID validado por los validators en rutas
 
     const publicacion = await Publicacion.findById(id)
     if (!publicacion) {
@@ -203,9 +200,7 @@ const eliminarArticuloAdmin = async (req, res) => {
       return res.status(403).json({ msg: 'Acceso no autorizado. Solo administradores de red pueden eliminar artículos.' })
     }
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ msg: 'ID de artículo no válido' })
-    }
+    // ID validado por los validators en rutas
 
     const articulo = await Articulo.findById(id)
     if (!articulo) {

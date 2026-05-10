@@ -15,8 +15,7 @@ const solicitarCreacionRed = async (req, res) => {
     const { nombre, descripcion, fotoPerfil } = req.body
     const estudianteId = req.user?._id
 
-    if (!nombre || !nombre.trim()) return res.status(400).json({ msg: 'Nombre de la red es requerido' })
-    if (!descripcion || !descripcion.trim()) return res.status(400).json({ msg: 'Descripción de la red es requerida' })
+    // Formato/presencia de `nombre` y `descripcion` validados por validators en rutas
 
     // Evitar duplicados por nombre
     const existe = await RedComunitaria.findOne({ nombre: nombre.trim() })
@@ -83,17 +82,23 @@ const crearPublicacionExtendida = async (req, res) => {
     const { id } = req.params
     const estudianteId = req.user?._id
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ msg: 'ID de publicación no válido' })
-    }
+    // ID validado por validators en rutas
 
     const publicacion = await Publicacion.findById(id)
     if (!publicacion) {
       return res.status(404).json({ msg: 'Publicación no encontrada' })
     }
 
-    // Aquí podrías retornar más info, como relaciones, comentarios, etc.
-    return res.status(200).json({ publicacion })
+    // Popular autor, comunidad y likes
+    const publicacionPop = await Publicacion.findById(id)
+      .populate('autorId', 'nombre apellido')
+      .populate('comunidadId', 'nombre')
+      .populate('likes', 'nombre apellido')
+
+    // Obtener comentarios desde el modelo Comentario (con user info)
+    const comentarios = await Comentario.find({ postId: id }).populate('userId', 'nombre apellido').sort({ createdAt: 1 })
+
+    return res.status(200).json({ publicacion: publicacionPop, comentarios })
   } catch (error) {
     console.error('Error al crear publicación extendida:', error)
     return res.status(500).json({ msg: 'Error en el servidor' })
@@ -105,9 +110,7 @@ const darLikePublicacion = async (req, res) => {
     const { id } = req.params
     const estudianteId = req.user?._id
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ msg: 'ID de publicación no válido' })
-    }
+    // ID validado por validators en rutas
 
     const publicacion = await Publicacion.findById(id)
     if (!publicacion) {
@@ -115,22 +118,27 @@ const darLikePublicacion = async (req, res) => {
     }
 
     const yaTieneLike = publicacion.likes.some((likeId) => likeId.equals(estudianteId))
-    if (yaTieneLike) {
-      return res.status(200).json({ msg: 'La publicación ya tenía like', likes: publicacion.likes.length })
-    }
+      if (yaTieneLike) {
+        // devolver lista poblada de quienes dieron like
+        const pub = await Publicacion.findById(id).populate('likes', 'nombre apellido')
+        return res.status(200).json({ msg: 'La publicación ya tenía like', likes: pub.likes })
+      }
 
-    publicacion.likes.push(estudianteId)
+      publicacion.likes.push(estudianteId)
+    // actualizar contador
+    publicacion.likesCount = publicacion.likes.length
     await publicacion.save()
 
-    await crearNotificacion({
-      usuarioId: publicacion.autorId,
-      emisorId: estudianteId,
-      tipo: 'like',
-      publicacionId: publicacion._id,
-      mensaje: 'Le dieron like a tu publicación'
-    })
+      await crearNotificacion({
+        usuarioId: publicacion.autorId,
+        emisorId: estudianteId,
+        tipo: 'like',
+        publicacionId: publicacion._id,
+        mensaje: 'Le dieron like a tu publicación'
+      })
 
-    return res.status(200).json({ msg: 'Like agregado', likes: publicacion.likes.length })
+      const pub = await Publicacion.findById(id).populate('likes', 'nombre apellido')
+      return res.status(200).json({ msg: 'Like agregado', likes: pub.likes })
   } catch (error) {
     console.error('Error al dar like:', error)
     return res.status(500).json({ msg: 'Error en el servidor' })
@@ -142,9 +150,7 @@ const quitarLikePublicacion = async (req, res) => {
     const { id } = req.params
     const estudianteId = req.user?._id
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ msg: 'ID de publicación no válido' })
-    }
+    // ID validado por validators en rutas
 
     const publicacion = await Publicacion.findById(id)
     if (!publicacion) {
@@ -152,9 +158,12 @@ const quitarLikePublicacion = async (req, res) => {
     }
 
     publicacion.likes = publicacion.likes.filter((likeId) => !likeId.equals(estudianteId))
+    // actualizar contador
+    publicacion.likesCount = publicacion.likes.length
     await publicacion.save()
 
-    return res.status(200).json({ msg: 'Like removido', likes: publicacion.likes.length })
+    const pub = await Publicacion.findById(id).populate('likes', 'nombre apellido')
+    return res.status(200).json({ msg: 'Like removido', likes: pub.likes })
   } catch (error) {
     console.error('Error al quitar like:', error)
     return res.status(500).json({ msg: 'Error en el servidor' })
@@ -167,13 +176,9 @@ const crearComentarioPublicacion = async (req, res) => {
     const { contenido } = req.body
     const estudianteId = req.user?._id
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ msg: 'ID de publicación no válido' })
-    }
+    // ID validado por validators en rutas
 
-    if (!contenido || !contenido.trim()) {
-      return res.status(400).json({ msg: 'Debes escribir el contenido del comentario' })
-    }
+    // `contenido` validado por validators en rutas
 
     const publicacion = await Publicacion.findById(id)
     if (!publicacion) {
@@ -187,11 +192,16 @@ const crearComentarioPublicacion = async (req, res) => {
       parentId: null
     })
 
+    // popular comentario con datos del usuario
+    const comentarioPop = await Comentario.findById(comentario._id).populate('userId', 'nombre apellido')
+
     publicacion.comentarios.push({
       autorId: estudianteId,
       contenido: contenido.trim(),
       timestamp: new Date()
     })
+    // actualizar contador de comentarios
+    publicacion.commentsCount = publicacion.comentarios.length
     await publicacion.save()
 
     await crearNotificacion({
@@ -203,7 +213,7 @@ const crearComentarioPublicacion = async (req, res) => {
       mensaje: 'Comentaron tu publicación'
     })
 
-    return res.status(201).json({ msg: 'Comentario creado', comentario })
+    return res.status(201).json({ msg: 'Comentario creado', comentario: comentarioPop })
   } catch (error) {
     console.error('Error al crear comentario:', error)
     return res.status(500).json({ msg: 'Error en el servidor' })
@@ -216,13 +226,9 @@ const responderComentario = async (req, res) => {
     const { contenido } = req.body
     const estudianteId = req.user?._id
 
-    if (!mongoose.Types.ObjectId.isValid(comentarioId)) {
-      return res.status(400).json({ msg: 'ID de comentario no válido' })
-    }
+    // ID validado por validators en rutas
 
-    if (!contenido || !contenido.trim()) {
-      return res.status(400).json({ msg: 'Debes escribir el contenido de la respuesta' })
-    }
+    // `contenido` validado por validators en rutas
 
     const comentarioPadre = await Comentario.findById(comentarioId)
     if (!comentarioPadre) {
@@ -259,9 +265,7 @@ const listarComentariosArbol = async (req, res) => {
   try {
     const { id } = req.params
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ msg: 'ID de publicación no válido' })
-    }
+    // ID validado por validators en rutas
 
     const comentarios = await Comentario.find({ postId: id })
       .populate('userId', 'nombre apellido email')
@@ -297,9 +301,7 @@ const guardarPublicacion = async (req, res) => {
     const { id } = req.params
     const estudianteId = req.user?._id
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ msg: 'ID de publicación no válido' })
-    }
+    // ID validado por validators en rutas
 
     const [estudiante, publicacion] = await Promise.all([
       Estudiante.findById(estudianteId),
@@ -327,9 +329,7 @@ const quitarGuardadoPublicacion = async (req, res) => {
     const { id } = req.params
     const estudianteId = req.user?._id
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ msg: 'ID de publicación no válido' })
-    }
+    // ID validado por validators en rutas
 
     const estudiante = await Estudiante.findById(estudianteId)
     if (!estudiante) {
@@ -388,6 +388,7 @@ const obtenerFeedPorRed = async (req, res) => {
         Publicacion.find({ comunidadId: redId })
           .populate('autorId', 'nombre apellido')
           .populate('comunidadId', 'nombre')
+          .populate('likes', 'nombre apellido')
           .sort({ timestamp: -1, createdAt: -1 })
           .skip(skip)
           .limit(limitNumber),
@@ -406,6 +407,7 @@ const obtenerFeedPorRed = async (req, res) => {
       Publicacion.find()
         .populate('autorId', 'nombre apellido')
         .populate('comunidadId', 'nombre')
+        .populate('likes', 'nombre apellido')
         .sort({ timestamp: -1, createdAt: -1 })
         .skip(skip)
         .limit(limitNumber),
@@ -428,9 +430,7 @@ const obtenerRedConPublicaciones = async (req, res) => {
     const { id } = req.params
     const { page = 1, limit = 10 } = req.query
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ msg: 'ID de red no válido' })
-    }
+    // ID validado por validators en rutas
 
     const red = await RedComunitaria.findById(id)
       .populate('creadaPor', 'nombre apellido email')
@@ -453,6 +453,7 @@ const obtenerRedConPublicaciones = async (req, res) => {
       Publicacion.find({ comunidadId: id })
         .populate('autorId', 'nombre apellido username')
         .populate('comunidadId', 'nombre')
+        .populate('likes', 'nombre apellido')
         .sort({ timestamp: -1, createdAt: -1 })
         .skip(skip)
         .limit(limitNumber),
@@ -518,7 +519,7 @@ const listarNotificaciones = async (req, res) => {
 const marcarNotificacionLeida = async (req, res) => {
   try {
     const { id } = req.params
-    if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ msg: 'ID no válido' })
+    // ID validado por validators en rutas
     const notif = await Notificacion.findById(id)
     if (!notif) return res.status(404).json({ msg: 'Notificación no encontrada' })
     notif.leida = true
@@ -556,9 +557,7 @@ const resolverAprobacionRed = async (req, res) => {
     const { redId } = req.params
     const { accion } = req.body
 
-    if (!mongoose.Types.ObjectId.isValid(redId)) {
-      return res.status(400).json({ msg: 'ID de red no válido' })
-    }
+    // `redId` validado por validators en rutas
 
     const red = await RedComunitaria.findById(redId)
     if (!red) return res.status(404).json({ msg: 'Red no encontrada' })
@@ -668,9 +667,7 @@ const revocarAdminRed = async (req, res) => {
     const { redId } = req.params
     const { usuarioId, motivo = null } = req.body
 
-    if (!mongoose.Types.ObjectId.isValid(redId) || !mongoose.Types.ObjectId.isValid(usuarioId)) {
-      return res.status(400).json({ msg: 'ID no válido' })
-    }
+    // `redId` y `usuarioId` validados por validators en rutas
 
     const red = await RedComunitaria.findById(redId)
     if (!red) return res.status(404).json({ msg: 'Red no encontrada' })
@@ -719,9 +716,7 @@ const asignarDuenoRed = async (req, res) => {
     const { redId } = req.params
     const { usuarioId } = req.body
 
-    if (!mongoose.Types.ObjectId.isValid(redId) || !mongoose.Types.ObjectId.isValid(usuarioId)) {
-      return res.status(400).json({ msg: 'ID no válido' })
-    }
+    // `redId` y `usuarioId` validados por validators en rutas
 
     const red = await RedComunitaria.findById(redId)
     if (!red) return res.status(404).json({ msg: 'Red no encontrada' })

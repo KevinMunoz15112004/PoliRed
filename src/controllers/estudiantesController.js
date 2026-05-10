@@ -16,19 +16,8 @@ const registroEstudiante = async (req, res) => {
   try {
     const { nombre, apellido, email, password, redComunitaria } = req.body
 
-    if ([nombre, apellido, email, password].some(campo => !campo)) {
-      return res.status(400).json({ msg: "Lo sentimos, debes llenar todos los campos obligatorios" })
-    }
-
-    const regexSoloLetras = /^[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$/
-
-    if (!regexSoloLetras.test(nombre.trim())) {
-      return res.status(400).json({ msg: "El nombre no debe contener números ni caracteres especiales" })
-    }
-
-    if (!regexSoloLetras.test(apellido.trim())) {
-      return res.status(400).json({ msg: "El apellido no debe contener números ni caracteres especiales" })
-    }
+    // Presencia y formato de campos (nombre, apellido, email, password)
+    // son validados por los `validators` en las rutas.
 
     // Nota: el campo `celular` fue eliminado del modelo; ya no se valida ni se guarda.
 
@@ -129,10 +118,7 @@ const confirmarMailEstudiante = async (req, res) => {
 
 const recuperarPasswordEstudiante = async (req, res) => {
   const { email } = req.body
-
-  if (Object.values(req.body).includes("")) {
-    return res.status(400).json({ msg: "Lo sentimos, debes llenar todos los campos" })
-  }
+  // Formato/presencia validado por validators en rutas
 
   const estudianteBDD = await Estudiante.findOne({ email })
 
@@ -171,14 +157,7 @@ const comprobarTokenPasswordEstudiante = async (req, res) => {
 
 const crearNuevoPasswordEstudiante = async (req, res) => {
   const { password, confirmpassword } = req.body
-
-  if ([password, confirmpassword].includes("")) {
-    return res.status(400).json({ msg: "Lo sentimos, debes llenar todos los campos" })
-  }
-
-  if (password !== confirmpassword) {
-    return res.status(400).json({ msg: "Lo sentimos, los passwords no coinciden" })
-  }
+  // Formato y coincidencia de passwords validados por validators en rutas
 
   const estudianteBDD = await Estudiante.findOne({ token: req.params.token })
 
@@ -300,35 +279,14 @@ const actualizarPerfilEstudiante = async (req, res) => {
   const { id } = req.params;
   const { nombre, apellido, email, redComunitaria } = req.body
 
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    return res.status(404).json({ msg: "Lo sentimos, debe ser un ID válido" })
-  }
+  // El ID es validado por los validators en las rutas
 
   const tieneDatos = Object.values(req.body).some(valor => valor && valor.trim() !== "")
   if (!tieneDatos) {
     return res.status(400).json({ msg: "Lo sentimos, debes llenar al menos un campo para actualizar" })
   }
 
-  if (nombre !== undefined) {
-    const nombreRegex = /^[a-zA-ZÀ-ÿ\s]+$/;
-    if (!nombreRegex.test(nombre.trim())) {
-      return res.status(400).json({ msg: "El nombre sólo debe contener letras y espacios" });
-    }
-  }
-
-  if (apellido !== undefined) {
-    const apellidoRegex = /^[a-zA-ZÀ-ÿ\s]+$/;
-    if (!apellidoRegex.test(apellido.trim())) {
-      return res.status(400).json({ msg: "El apellido sólo debe contener letras y espacios" });
-    }
-  }
-
-  if (email !== undefined) {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email.trim())) {
-      return res.status(400).json({ msg: "El email no es válido" });
-    }
-  }
+  // Validaciones de formato para nombre/apellido/email realizadas por los validators en rutas
 
 
   const estudianteBDD = await Estudiante.findById(id)
@@ -377,9 +335,7 @@ const actualizarPasswordEstudiante = async (req, res) => {
     return res.status(404).json({ msg: "Lo sentimos, no existe el estudiante" })
   }
 
-  if (!req.body.passwordactual || !req.body.passwordnuevo) {
-    return res.status(400).json({ msg: "Lo sentimos, debes llenar todos los campos" })
-  }
+  // Formato/presencia de campos de contraseña validado por validators en rutas
 
   const verificarPassword = await estudianteBDD.matchPassword(req.body.passwordactual)
 
@@ -492,9 +448,7 @@ const crearPublicacion = async (req, res) => {
       if (!redGlobal) return res.status(500).json({ msg: 'No hay red global configurada' })
       targetComunidadId = redGlobal._id.toString()
     } else {
-      if (!mongoose.Types.ObjectId.isValid(targetComunidadId)) {
-        return res.status(400).json({ msg: "ID de comunidad no válido" })
-      }
+      // El formato de `targetComunidadId` es validado por los validators en las rutas
     }
 
     const estudianteBDD = await Estudiante.findById(estudianteId)
@@ -502,15 +456,7 @@ const crearPublicacion = async (req, res) => {
       return res.status(404).json({ msg: "Estudiante no encontrado" })
     }
 
-    if (!titulo || !contenido) {
-      return res.status(400).json({ msg: "Lo sentimos, debes llenar todos los campos" })
-    }
-
-    const maxPalabrasTitulo = 10
-    const palabrasTitulo = titulo.trim().split(/\s+/)
-    if (palabrasTitulo.length > maxPalabrasTitulo) {
-      return res.status(400).json({ msg: `El título no debe exceder de ${maxPalabrasTitulo} palabras` })
-    }
+    // `titulo` y `contenido` y longitud del título son validados por los validators en rutas
 
     // Obtener doc de la red objetivo para determinar si es global
     const redDoc = await RedComunitaria.findById(targetComunidadId)
@@ -564,9 +510,7 @@ const actualizarPublicacion = async (req, res) => {
     const estudianteId = req.user?._id
     const { titulo, contenido } = req.body
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ msg: 'ID de publicación no válido' })
-    }
+    // ID validado por los validators en rutas
 
     const publicacion = await Publicacion.findById(id)
     if (!publicacion) {
@@ -598,9 +542,7 @@ const eliminarPublicacion = async (req, res) => {
     const { id } = req.params
     const estudianteId = req.user?._id
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ msg: 'ID de publicación no válido' })
-    }
+    // ID validado por los validators en rutas
 
     const publicacion = await Publicacion.findById(id)
     if (!publicacion) {
@@ -638,9 +580,7 @@ const listarPublicacionesPorRed = async (req, res) => {
   try {
     const { redId } = req.params
 
-    if (!mongoose.Types.ObjectId.isValid(redId)) {
-      return res.status(400).json({ msg: 'ID de red no válido' })
-    }
+    // `redId` validado por validators en rutas
 
     const redExiste = await RedComunitaria.findById(redId)
     if (!redExiste) {
@@ -669,36 +609,14 @@ const publicarArticulo = async (req, res) => {
     const { titulo, descripcion, precio, comunidadId, imagen } = req.body
     const estudianteId = req.user?._id
 
-    if (!mongoose.Types.ObjectId.isValid(comunidadId)) {
-      return res.status(400).json({ msg: "ID de comunidad no válido" })
-    }
+    // `comunidadId` validado por validators en rutas (cuando aplica)
 
     const estudianteBDD = await Estudiante.findById(estudianteId)
     if (!estudianteBDD) {
       return res.status(404).json({ msg: "Estudiante no encontrado" })
     }
 
-    if (!titulo || !descripcion || !precio) {
-      return res.status(400).json({ msg: "Debes completar todos los campos requeridos" })
-    }
-
-    const maxPalabrasTitulo = 10
-    const palabrasTitulo = titulo.trim().split(/\s+/)
-    if (palabrasTitulo.length > maxPalabrasTitulo) {
-      return res.status(400).json({ msg: `El título no debe exceder de ${maxPalabrasTitulo} palabras` })
-    }
-
-    const precioStr = String(precio)
-
-    const regexPrecio = /^\d+(\.\d+)?$/
-    if (!regexPrecio.test(precioStr)) {
-      return res.status(400).json({ msg: "El precio debe ser un número válido sin letras" })
-    }
-
-    const precioFloat = parseFloat(precio)
-    if (isNaN(precioFloat) || precioFloat <= 0) {
-      return res.status(400).json({ msg: "El precio debe ser un número válido mayor que 0" })
-    }
+    // Validaciones de título, descripción y precio realizadas por validators en rutas
 
     if (!estudianteBDD.redComunitaria || estudianteBDD.redComunitaria.length === 0) {
       return res.status(400).json({ msg: "Debes pertenecer a una red comunitaria para publicar un artículo" })
@@ -752,9 +670,7 @@ const listarArticulosPorRed = async (req, res) => {
   try {
     const { redId } = req.params
 
-    if (!mongoose.Types.ObjectId.isValid(redId)) {
-      return res.status(400).json({ msg: 'ID de red no válido' })
-    }
+    // `redId` validado por validators en rutas
 
     const redExiste = await RedComunitaria.findById(redId)
     if (!redExiste) {
@@ -784,9 +700,7 @@ const actualizarArticulo = async (req, res) => {
     const estudianteId = req.user?._id
     const { titulo, descripcion, precio, imagen } = req.body
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ msg: 'ID de artículo no válido' })
-    }
+    // ID validado por los validators en rutas
 
     const articulo = await Articulo.findById(id)
     if (!articulo) {
@@ -797,11 +711,7 @@ const actualizarArticulo = async (req, res) => {
       return res.status(403).json({ msg: 'No tienes permiso para actualizar este artículo' });
     }
 
-    const maxPalabrasTitulo = 10
-    const palabrasTitulo = titulo.trim().split(/\s+/)
-    if (palabrasTitulo.length > maxPalabrasTitulo) {
-      return res.status(400).json({ msg: `El título no debe exceder de ${maxPalabrasTitulo} palabras` })
-    }
+    // Longitud del título validada por los validators en rutas
 
     if (!titulo && !descripcion && !precio && !imagen) {
       return res.status(400).json({ msg: 'Debes enviar al menos un campo para actualizar' });
@@ -826,9 +736,7 @@ const eliminarArticulo = async (req, res) => {
     const { id } = req.params
     const estudianteId = req.user?._id
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ msg: 'ID de artículo no válido' })
-    }
+    // ID validado por los validators en rutas
 
     const articulo = await Articulo.findById(id)
     if (!articulo) {

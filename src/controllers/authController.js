@@ -10,7 +10,7 @@ export const signToken = (user, context = 'mobile') => {
 export const login = async (req, res) => {
   try {
     const { email, password, context = 'mobile' } = req.body
-    if (!email || !password) return res.status(400).json({ msg: 'Email y password requeridos' })
+    // Formato/presencia de email y password validado por validators en rutas
 
     const user = await Estudiante.findOne({ email })
     if (!user) return res.status(404).json({ msg: 'Usuario no registrado' })
