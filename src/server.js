@@ -4,16 +4,13 @@ import dotenv from 'dotenv'
 import cors from 'cors'
 import superAdminRoutes from './routers/superAdminRoutes.js'
 import estudiantesRoutes from './routers/estudiantesRoutes.js'
-import { loginRouter } from './routers/microsoftRoutes.js'
 import authRoutes from './routers/authRoutes.js'
 import cloudinary from 'cloudinary'
 import fileUpload from "express-fileupload"
-import passport from 'passport'
 import chatRoutes from './routers/chatRoutes.js'
 import mensajesRoutes from './routers/mensajesRoutes.js'
 import { configurarSocket } from './socket.js'
 import http from 'http';
-import './middlewares/microsoftMiddleware.js'
 import adminRedes from './routers/adminRedRoutes.js'
 import socialRoutes from './routers/socialRoutes.js'
 
@@ -64,10 +61,6 @@ app.use('/api', chatRoutes)
 
 // Ruta para obtener los mensajes
 app.use('/api', mensajesRoutes)
-
-// Login con microsoft
-app.use(passport.initialize())
-app.use('/auth', loginRouter)
 
 // Rutas 
 app.get('/',(req,res)=>{

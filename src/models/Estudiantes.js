@@ -18,7 +18,6 @@ const estudianteSchema = new Schema({
     trim: true,
     unique: true,
     sparse: true,
-    default: null,
     minlength: 3,
     maxlength: 20,
     match: [/^[A-Za-z0-9._-]+$/, 'Username inválido. Sólo letras, números, puntos, guiones bajos y guiones.']
@@ -44,10 +43,7 @@ const estudianteSchema = new Schema({
   },
   password: {
     type: String,
-    required: function () {
-      return !this.authMicrosoft
-    },
-    default: null
+    required: true
   },
   status: {
     type: Boolean,
@@ -72,10 +68,7 @@ const estudianteSchema = new Schema({
     ref: 'Publicacion',
     default: []
   }],
-  authMicrosoft: {
-    type: Boolean,
-    default: false
-  }
+  
 }, {
   timestamps: true
 });

@@ -1,7 +1,7 @@
 import {Router} from 'express'
 import { registroEstudiante, confirmarMailEstudiante, comprobarTokenPasswordEstudiante, recuperarPasswordEstudiante, crearNuevoPasswordEstudiante, perfilEstudiante, actualizarUsername, completarPerfil, actualizarPerfilEstudiante, actualizarPasswordEstudiante, crearPublicacion, unirseARedComunitaria, listarPublicaciones, listarRedesDelEstudiante, listarPublicacionesPorRed, listarPublicacionesGlobal, listarPublicacionesComunidades, obtenerRedesComunitarias, obtenerRedesExplorar, obtenerPerfilRed, publicarArticulo, listarArticulosPorRed, eliminarArticulo, actualizarArticulo, actualizarPublicacion, eliminarPublicacion, comprarArticulo, listarTodosArticulos, obtenerEstudiantes } 
 from '../controllers/estudiantesController.js'
-import { requirePerfilCompleto } from '../middlewares/checkPerfilCompleto.js'
+import { requirePerfilCompleto, disallowPerfilCompleto } from '../middlewares/checkPerfilCompleto.js'
 import { verifyToken } from '../middlewares/auth.js'
 import validators from '../validators/index.js'
 import validateResult from '../validators/validateResult.js'
@@ -16,7 +16,7 @@ router.get('/recuperar-password-e/:token', validators.tokenParam('token'), valid
 router.post('/nuevo-password-e/:token', validators.crearNuevoPasswordValidator, validateResult, crearNuevoPasswordEstudiante)
 router.get('/perfil-estudiante', verifyToken, perfilEstudiante)
 router.patch('/perfil/username', verifyToken, actualizarUsername)
-router.patch('/completar/perfil', verifyToken, completarPerfil)
+router.patch('/completar/perfil', verifyToken, disallowPerfilCompleto, completarPerfil)
 router.patch('/estudiante/:id', verifyToken, validators.mongoIdParam('id'), validators.actualizarPerfilValidator, validateResult, actualizarPerfilEstudiante)
 router.patch('/estudiante/actualizarpassword/:id', verifyToken, validators.mongoIdParam('id'), validators.actualizarPasswordValidator, validateResult, actualizarPasswordEstudiante)
 

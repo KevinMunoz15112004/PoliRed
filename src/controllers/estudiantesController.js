@@ -43,8 +43,6 @@ const registroEstudiante = async (req, res) => {
     const nuevoEstudiante = new Estudiante({
       nombre,
       apellido,
-      // username left null initially; will be set later via /perfil/username
-      username: null,
       email,
       password,
       redComunitaria: combinado,
@@ -121,11 +119,6 @@ const recuperarPasswordEstudiante = async (req, res) => {
   // Formato/presencia validado por validators en rutas
 
   const estudianteBDD = await Estudiante.findOne({ email })
-
-  if (estudianteBDD.authMicrosoft) {
-    return res.status(400).json({ msg: "Este usuario inició sesión con Microsoft y no tiene contraseña" })
-  }
-
   if (!estudianteBDD) {
     return res.status(404).json({ msg: "Lo sentimos, el usuario no se encuentra registrado" })
   }
@@ -143,11 +136,6 @@ const comprobarTokenPasswordEstudiante = async (req, res) => {
   const { token } = req.params
 
   const estudianteBDD = await Estudiante.findOne({ token })
-
-  if (estudianteBDD.authMicrosoft) {
-    return res.status(400).json({ msg: "Este usuario inició sesión con Microsoft y no tiene contraseña" })
-  }
-
   if (!estudianteBDD || estudianteBDD.token !== token) {
     return res.status(404).json({ msg: "Lo sentimos, no se puede validar la cuenta" })
   }
@@ -160,11 +148,6 @@ const crearNuevoPasswordEstudiante = async (req, res) => {
   // Formato y coincidencia de passwords validados por validators en rutas
 
   const estudianteBDD = await Estudiante.findOne({ token: req.params.token })
-
-  if (estudianteBDD.authMicrosoft) {
-    return res.status(400).json({ msg: "Este usuario inició sesión con Microsoft y no tiene contraseña" })
-  }
-
   if (!estudianteBDD || estudianteBDD.token !== req.params.token) {
     return res.status(404).json({ msg: "Lo sentimos, no se puede validar la cuenta" })
   }
@@ -177,7 +160,7 @@ const crearNuevoPasswordEstudiante = async (req, res) => {
   const correoAdmin = estudianteBDD.email
   const admin = await AdminRed.findOne({ email: correoAdmin })
 
-  if (admin && !admin.authMicrosoft) {
+  if (admin) {
     admin.password = await admin.encrypPassword(password)
     await admin.save();
   }
@@ -239,6 +222,10 @@ const completarPerfil = async (req, res) => {
     const { username, fotoPerfil } = req.body
 
     if (!estudianteId) return res.status(401).json({ msg: 'Usuario no autenticado' })
+
+    if (req.user && req.user.perfilCompleto) {
+      return res.status(403).json({ msg: 'El perfil ya está completo' })
+    }
 
     const usernameTrim = username ? String(username).trim() : ''
     if (!usernameTrim) return res.status(400).json({ msg: 'Username requerido' })

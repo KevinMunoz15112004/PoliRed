@@ -18,6 +18,10 @@ export const login = async (req, res) => {
     const match = await bcrypt.compare(password, user.password || '')
     if (!match) return res.status(401).json({ msg: 'Contraseña incorrecta' })
 
+    if (user.confirmEmail === false){
+      return res.status(403).json({ msg: 'Confirma tu correo electrónico para iniciar sesión' })
+    }
+
     // Si se solicita context admin_panel, verificar rol
     if (context === 'admin_panel' && !user.roles.includes('admin_red')) {
       return res.status(403).json({ msg: 'Usuario no autorizado para panel administrativo' })
