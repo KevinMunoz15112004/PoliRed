@@ -413,6 +413,14 @@ const eliminarEstudiante = async (req, res) => {
   // ID validado por validators en rutas
 
   try {
+    // Verificar si el estudiante es admin de alguna red comunitaria
+    const redComoCreador = await RedComunitaria.findOne({ creadaPor: id })
+    const adminActivo = await AdminRed.findOne({ usuarioId: id, estado: 'activo' })
+
+    if (redComoCreador || adminActivo) {
+      return res.status(400).json({ msg: 'El estudiante es administrador de una red comunitaria. Debe revocarle el cargo de admin de red antes de eliminarlo.' })
+    }
+
     const estudianteEliminado = await Estudiante.findByIdAndDelete(id)
 
     if (!estudianteEliminado) {
@@ -425,31 +433,39 @@ const eliminarEstudiante = async (req, res) => {
   }
 }
 
-//Controladores para la gestión de redes comunitarias
-const crearRed = async (req, res) => {
+const suspenderEstudiante = async (req, res) => {
   try {
-    const { nombre, descripcion } = req.body;
+    const { id } = req.params
+    const estudiante = await Estudiante.findById(id)
+    if (!estudiante) return res.status(404).json({ msg: 'Estudiante no encontrado' })
 
-    const existente = await RedComunitaria.findOne({ nombre });
-    if (existente) {
-      return res.status(400).json({ mensaje: 'Ya existe una red con ese nombre' })
-    }
+    estudiante.suspendido = true
+    await estudiante.save()
 
-    const red = new RedComunitaria({
-      nombre,
-      descripcion,
-      miembros: [],
-      cantidadMiembros: 0
-    })
-
-    await red.save();
-
-    res.status(201).json({ msg: 'Red comunitaria creada correctamente', red })
+    res.status(200).json({ msg: 'Estudiante suspendido correctamente' })
   } catch (error) {
-    res.status(400).json({ msg: "Debe llenar los campos obligatorios" })
+    console.error(error)
+    res.status(500).json({ msg: 'Error en el servidor' })
   }
 }
 
+const habilitarEstudiante = async (req, res) => {
+  try {
+    const { id } = req.params
+    const estudiante = await Estudiante.findById(id)
+    if (!estudiante) return res.status(404).json({ msg: 'Estudiante no encontrado' })
+
+    estudiante.suspendido = false
+    await estudiante.save()
+
+    res.status(200).json({ msg: 'Estudiante habilitado correctamente' })
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({ msg: 'Error en el servidor' })
+  }
+}
+
+//Controladores para la gestión de redes comunitarias
 const obtenerRedes = async (req, res) => {
   const redes = await RedComunitaria.find().populate('miembros', 'nombre apellido email')
   res.json(redes);
@@ -571,7 +587,8 @@ export {
   obtenerEstudiantePorId,
   actualizarEstudiante,
   eliminarEstudiante,
-  crearRed,
+  suspenderEstudiante,
+  habilitarEstudiante,
   obtenerRedes,
   obtenerRedPorId,
   actualizarRed,

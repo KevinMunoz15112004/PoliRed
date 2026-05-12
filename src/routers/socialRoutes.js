@@ -66,6 +66,7 @@ router.post('/multimedia/subir', verifyToken, requirePerfilCompleto, subirArchiv
 
 // Admin de red
 router.patch('/admin/redes/:redId/oficial', verifyToken, requireRole('admin_red'), validators.mongoIdParam('redId'), validateResult, marcarRedOficialAdmin)
+
 // Reportes: estudiantes crean (publicación), admin de red consulta los reportes de su red
 router.post('/reportes/publicacion', verifyToken, requirePerfilCompleto, validators.reportPublicacionValidator, validateResult, crearReportePublicacion)
 router.get('/admin/reportes', verifyToken, requireRole('admin_red'), listarReportesAdminRed)

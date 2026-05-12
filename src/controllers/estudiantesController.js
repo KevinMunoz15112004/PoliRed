@@ -421,6 +421,53 @@ const listarRedesDelEstudiante = async (req, res) => {
   }
 }
 
+const salirseDeRedComunitaria = async (req, res) => {
+  const estudianteId = req.user?._id
+  const { redId } = req.body
+
+  if (!redId) return res.status(400).json({ msg: 'Debes enviar el id de la red comunitaria' })
+
+  try {
+    const red = await RedComunitaria.findById(redId)
+    if (!red) return res.status(404).json({ msg: 'La red comunitaria no existe' })
+
+    // No permitir salir de redes globales
+    if (red.esGlobal) {
+      return res.status(400).json({ msg: 'No puedes salir de la red global' })
+    }
+
+    const estudiante = await Estudiante.findById(estudianteId)
+    if (!estudiante) return res.status(404).json({ msg: 'Estudiante no encontrado' })
+
+    const pertenece = estudiante.redComunitaria && estudiante.redComunitaria.some(r => r.equals(red._id))
+    if (!pertenece) {
+      return res.status(400).json({ msg: 'No perteneces a esta red comunitaria' })
+    }
+
+    // Verificar si el estudiante es admin de la red
+    const adminActivo = await AdminRed.findOne({ usuarioId: estudianteId, redId: red._id, estado: 'activo' })
+    if (adminActivo || (red.creadaPor && red.creadaPor.equals(estudianteId))) {
+      return res.status(400).json({ msg: 'Eres administrador de esta red. Ponte en contacto con el Super Administrador para que revoque tu rol de admin de red antes de salir.' })
+    }
+
+    // Remover la red del estudiante
+    estudiante.redComunitaria = estudiante.redComunitaria.filter(r => !r.equals(red._id))
+    await estudiante.save()
+
+    // Remover el estudiante de los miembros de la red
+    if (red.miembros && red.miembros.some(m => m.equals(estudiante._id))) {
+      red.miembros = red.miembros.filter(m => !m.equals(estudiante._id))
+      red.cantidadMiembros = red.miembros.length
+      await red.save()
+    }
+
+    return res.status(200).json({ msg: 'Has salido correctamente de la red comunitaria' })
+  } catch (error) {
+    console.error('Error al salirse de la red:', error)
+    return res.status(500).json({ msg: 'Error del servidor' })
+  }
+}
+
 const crearPublicacion = async (req, res) => {
   try {
     const { titulo, contenido, comunidadId } = req.body
@@ -930,6 +977,7 @@ export {
   obtenerPerfilRed,
   unirseARedComunitaria,
   listarRedesDelEstudiante,
+  salirseDeRedComunitaria,
   listarPublicacionesPorRed,
   listarPublicacionesGlobal,
   listarPublicacionesComunidades,

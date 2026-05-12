@@ -4,6 +4,7 @@ import { verificarEstadoLogin } from '../middlewares/verificarLogin.js'
 import { actualizarAvatarAdminRed, perfilAdminRed, actualizarPerfilAdminRed, actualizarPasswordAdminRed, listarPublicaciones, listarArticulosPorRedAdmin, eliminarArticuloAdmin, eliminarPublicacionAdmin, verEstudiantesDeRed, eliminarEstudianteDeRed, actualizarRedComunitaria, obtenerInfoRed} from '../controllers/adminRedController.js'
 import validators from '../validators/index.js'
 import validateResult from '../validators/validateResult.js'
+import { resolverReportePublicacionAdmin } from '../controllers/reportesController.js'
 
 const router = Router()
 
@@ -24,5 +25,8 @@ router.get('/red/admin/informacion', verifyToken, requireRole('admin_red'), obte
 router.patch('/admin/actualizar/red', verifyToken, requireRole('admin_red'), actualizarRedComunitaria)
 router.get('/admin/estudiantes/listar', verifyToken, requireRole('admin_red'), verEstudiantesDeRed)
 router.delete('/admin/estudiantes/eliminar/:estudianteId', verifyToken, requireRole('admin_red'), validators.mongoIdParam('estudianteId'), validateResult, eliminarEstudianteDeRed)
+
+// Admin Red: resolver reportes de publicaciones de su red
+router.patch('/reportes/:id/resolver', verifyToken, requireRole('admin_red'), validators.mongoIdParam('id'), validateResult, resolverReportePublicacionAdmin)
 
 export default router

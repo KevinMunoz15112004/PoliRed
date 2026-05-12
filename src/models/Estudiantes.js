@@ -49,6 +49,10 @@ const estudianteSchema = new Schema({
     type: Boolean,
     default: true
   },
+  suspendido: {
+    type: Boolean,
+    default: false
+  },
   token: {
     type: String,
     default: null

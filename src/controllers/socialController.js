@@ -525,7 +525,9 @@ const resolverAprobacionRed = async (req, res) => {
     if (accion === 'rechazar') {
       // Al rechazar, eliminamos la red y notificamos al creador
       const creadoPorId = red.creadaPor
-      await red.remove()
+      // `remove()` puede no estar disponible en algunas versiones de Mongoose;
+      // usar `findByIdAndDelete` para eliminar de forma segura.
+      await RedComunitaria.findByIdAndDelete(red._id)
 
       if (creadoPorId) {
         await crearNotificacion({
