@@ -500,7 +500,7 @@ const actualizarRed = async (req, res) => {
 
     const { nombre, descripcion } = req.body
 
-    if (!nombre && !descripcion) {
+    if (!nombre && !descripcion && typeof req.body.deshabilitada === 'undefined') {
       return res.status(400).json({ msg: "Lo sentimos, debes llenar al menos un campo a actualizar" });
     }
 

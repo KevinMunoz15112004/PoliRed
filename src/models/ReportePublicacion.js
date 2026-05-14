@@ -7,7 +7,7 @@ const reportePublicacionSchema = new Schema({
   publicacionId: { type: Schema.Types.ObjectId, ref: 'Publicacion', required: true },
   redId: { type: Schema.Types.ObjectId, ref: 'RedComunitaria', default: null },
   archivos: [{ type: String }],
-  estado: { type: String, enum: ['pendiente', 'en_progreso', 'resuelto'], default: 'pendiente' },
+  estado: { type: String, enum: ['pendiente', 'en_progreso', 'resuelto', 'rechazado'], default: 'pendiente' },
   respuesta: { type: String, default: null }
 }, { timestamps: true })
 

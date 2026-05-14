@@ -6,7 +6,7 @@ const reporteUsuarioSchema = new Schema({
   reporterId: { type: Schema.Types.ObjectId, ref: 'Estudiante', default: null },
   reportadoUsuarioId: { type: Schema.Types.ObjectId, ref: 'Estudiante', required: true },
   archivos: [{ type: String }],
-  estado: { type: String, enum: ['pendiente', 'en_progreso', 'resuelto'], default: 'pendiente' },
+  estado: { type: String, enum: ['pendiente', 'en_progreso', 'resuelto', 'rechazado'], default: 'pendiente' },
   respuesta: { type: String, default: null }
 }, { timestamps: true })
 
