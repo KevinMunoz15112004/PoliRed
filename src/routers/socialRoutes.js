@@ -16,6 +16,7 @@ import {
   guardarPublicacion,
   quitarGuardadoPublicacion,
   listarPublicacionesGuardadas,
+  listarPublicacionesLiked,
   // messaging endpoints moved to mensajesRoutes
   listarNotificaciones,
   marcarNotificacionLeida,
@@ -48,10 +49,7 @@ router.get('/publicaciones/:id/comentarios/arbol', verifyToken, validators.mongo
 router.post('/publicaciones/:id/guardar', verifyToken, requirePerfilCompleto, validators.mongoIdParam('id'), validateResult, guardarPublicacion)
 router.delete('/publicaciones/:id/guardar', verifyToken, requirePerfilCompleto, validators.mongoIdParam('id'), validateResult, quitarGuardadoPublicacion)
 router.get('/usuarios/guardados', verifyToken, listarPublicacionesGuardadas)
-
-// Note: feed and per-red feed endpoints consolidated in estudiantesRoutes
-
-// Messaging routes are exposed via `mensajesRoutes.js` to avoid duplication
+router.get('/usuarios/likes', verifyToken, listarPublicacionesLiked)
 
 router.get('/notificaciones', verifyToken, listarNotificaciones)
 router.patch('/notificaciones/:id/leida', verifyToken, validators.mongoIdParam('id'), validateResult, marcarNotificacionLeida)

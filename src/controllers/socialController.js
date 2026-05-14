@@ -395,6 +395,23 @@ const listarPublicacionesGuardadas = async (req, res) => {
   }
 }
 
+const listarPublicacionesLiked = async (req, res) => {
+  try {
+    const estudianteId = req.user?._id
+
+    // Buscar publicaciones cuyo array `likes` contenga al estudiante
+    const publicaciones = await Publicacion.find({ likes: estudianteId })
+      .populate('autorId', 'nombre apellido')
+      .populate('comunidadId', 'nombre')
+      .sort({ createdAt: -1 })
+
+    return res.status(200).json({ liked: publicaciones })
+  } catch (error) {
+    console.error('Error al listar publicaciones con like:', error)
+    return res.status(500).json({ msg: 'Error en el servidor' })
+  }
+}
+
 // Note: feed and per-red feed listing consolidated into `estudiantesController`.
 
 // --- Stubs for missing features (to be implemented) ---
@@ -712,9 +729,9 @@ export {
   guardarPublicacion,
   quitarGuardadoPublicacion,
   listarPublicacionesGuardadas,
+  listarPublicacionesLiked,
   unirseARedAprobada,
   salirDeRedComunitaria,
-  // messaging functions intentionally removed from this module
   listarNotificaciones,
   marcarNotificacionLeida,
   subirArchivoMultimedia,
