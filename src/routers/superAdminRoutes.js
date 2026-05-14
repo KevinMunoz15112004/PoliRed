@@ -3,9 +3,10 @@ import { comprobarTokenPassword, crearNuevoPassword, recuperarPassword, login, p
 from '../controllers/SuperAdminController.js'
 import validators from '../validators/index.js'
 import validateResult from '../validators/validateResult.js'
-import { listarReportesUsuarios, listarReportesApp, resolverReporteUsuario, resolverReporteApp, listarSolicitudesVerificacion, resolverSolicitudVerificacion } from '../controllers/reportesController.js'
+import { listarReportesUsuarios, listarReportesApp, resolverReporteUsuario, resolverReporteApp, listarSolicitudesVerificacion, resolverSolicitudVerificacion, listarSolicitudesRehabilitar, resolverSolicitudRehabilitar } from '../controllers/reportesController.js'
 import { autenticarToken, isSuperAdmin } from '../middlewares/authSuperAdmin.js'
 import { verificarEstadoLogin } from '../middlewares/verificarLogin.js'
+import { listarSolicitudesHabilitarUsuarios, resolverSolicitudHabilitarUsuario } from '../controllers/reportesController.js'
 
 const router = Router()
 
@@ -34,7 +35,7 @@ router.patch('/estudiantes/:id/habilitar', autenticarToken, isSuperAdmin, valida
 //Rutas para la gestión de redes comunitarias
 router.get('/redes', autenticarToken, isSuperAdmin, obtenerRedes)
 router.get('/red/:id', autenticarToken, isSuperAdmin, validators.mongoIdParam('id'), validateResult, obtenerRedPorId)
-router.patch('/actualizar-red/:id', autenticarToken, isSuperAdmin, validators.mongoIdParam('id'), validators.title('nombre', { optional: true }), validators.description('descripcion', { optional: true }), validateResult, actualizarRed)
+router.patch('/actualizar-red/:id', autenticarToken, isSuperAdmin, validators.mongoIdParam('id'), validators.title('nombre', { optional: true }), validators.description('descripcion', { optional: true }), validators.booleanBody('deshabilitada', { optional: true }), validateResult, actualizarRed)
 router.delete('/eliminar-red/:id', autenticarToken, isSuperAdmin, validators.mongoIdParam('id'), validateResult, eliminarRed)
 // Marcar red como verificada (SuperAdmin)
 router.patch('/red/:id/verificada', autenticarToken, isSuperAdmin, validators.mongoIdParam('id'), validators.booleanBody('verificada', { optional: true }), validateResult, marcarRedVerificada)
@@ -48,5 +49,13 @@ router.patch('/reportes/app/:id/resolver', autenticarToken, isSuperAdmin, valida
 // Solicitudes de verificación/oficialización de redes
 router.get('/redes/solicitudes', autenticarToken, isSuperAdmin, listarSolicitudesVerificacion)
 router.patch('/redes/solicitudes/:id/resolver', autenticarToken, isSuperAdmin, validators.mongoIdParam('id'), validateResult, resolverSolicitudVerificacion)
+
+// Solicitudes de habilitar usuarios (creadas por estudiantes suspendidos)
+router.get('/superadmin/solicitudes/habilitar-usuarios', autenticarToken, isSuperAdmin, listarSolicitudesHabilitarUsuarios)
+router.patch('/superadmin/solicitudes/habilitar-usuarios/:id/resolver', autenticarToken, isSuperAdmin, validators.mongoIdParam('id'), validateResult, resolverSolicitudHabilitarUsuario)
+
+// Solicitudes de rehabilitar redes (creadas por admin_red)
+router.get('/redes/rehabilitar/solicitudes', autenticarToken, isSuperAdmin, listarSolicitudesRehabilitar)
+router.patch('/redes/rehabilitar/solicitudes/:id/resolver', autenticarToken, isSuperAdmin, validators.mongoIdParam('id'), validateResult, resolverSolicitudRehabilitar)
 
 export default router

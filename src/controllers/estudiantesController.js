@@ -219,7 +219,7 @@ const actualizarUsername = async (req, res) => {
 const completarPerfil = async (req, res) => {
   try {
     const estudianteId = req.user?._id
-    const { username, fotoPerfil } = req.body
+    const { username, fotoPerfil, biografia } = req.body
 
     if (!estudianteId) return res.status(401).json({ msg: 'Usuario no autenticado' })
 
@@ -243,6 +243,11 @@ const completarPerfil = async (req, res) => {
 
     estudiante.username = usernameTrim
     estudiante.fotoPerfil = fotoPerfil || estudiante.fotoPerfil || null
+    if (typeof biografia !== 'undefined' && biografia !== null) {
+      const bioTrim = String(biografia).trim()
+      if (bioTrim.length > 150) return res.status(400).json({ msg: 'La biografía no puede exceder 150 caracteres' })
+      estudiante.biografia = bioTrim || null
+    }
     estudiante.perfilCompleto = true
     await estudiante.save()
 
@@ -254,6 +259,7 @@ const completarPerfil = async (req, res) => {
       roles: estudiante.roles,
       username: estudiante.username,
       fotoPerfil: estudiante.fotoPerfil,
+      biografia: estudiante.biografia,
       perfilCompleto: estudiante.perfilCompleto
     }})
   } catch (error) {
@@ -264,7 +270,7 @@ const completarPerfil = async (req, res) => {
 
 const actualizarPerfilEstudiante = async (req, res) => {
   const { id } = req.params;
-  const { nombre, apellido, email, redComunitaria } = req.body
+  const { nombre, apellido, email, redComunitaria, biografia } = req.body
 
   // El ID es validado por los validators en las rutas
 
@@ -291,6 +297,11 @@ const actualizarPerfilEstudiante = async (req, res) => {
 
   if (nombre) estudianteBDD.nombre = nombre
   if (apellido) estudianteBDD.apellido = apellido
+  if (typeof biografia !== 'undefined') {
+    const bioTrim = biografia === null ? null : String(biografia).trim()
+    if (bioTrim && bioTrim.length > 150) return res.status(400).json({ msg: 'La biografía no puede exceder 150 caracteres' })
+    estudianteBDD.biografia = bioTrim
+  }
   if (redComunitaria) {
     // No permitir remover redes globales: siempre mantenerlas
     const redesGlobales = await RedComunitaria.find({ esGlobal: true }).select('_id')
@@ -310,7 +321,8 @@ const actualizarPerfilEstudiante = async (req, res) => {
       nombre: estudianteBDD.nombre,
       apellido: estudianteBDD.apellido,
       email: estudianteBDD.email,
-      redComunitaria: estudianteBDD.redComunitaria
+      redComunitaria: estudianteBDD.redComunitaria,
+      biografia: estudianteBDD.biografia
     }
   })
 }
@@ -370,6 +382,10 @@ const unirseARedComunitaria = async (req, res) => {
     const red = await RedComunitaria.findById(redId)
     if (!red) {
       return res.status(404).json({ msg: 'La red comunitaria no existe' })
+    }
+
+    if (red.deshabilitada) {
+      return res.status(403).json({ msg: 'La red comunitaria está deshabilitada y no se puede unir nadie.' })
     }
 
     const estudiante = await Estudiante.findById(estudianteId)
@@ -495,6 +511,8 @@ const crearPublicacion = async (req, res) => {
     // Obtener doc de la red objetivo para determinar si es global
     const redDoc = await RedComunitaria.findById(targetComunidadId)
     if (!redDoc) return res.status(404).json({ msg: 'Red comunitaria no encontrada' })
+
+    if (redDoc.deshabilitada) return res.status(403).json({ msg: 'No puedes publicar en una red deshabilitada' })
 
     const pertenece = estudianteBDD.redComunitaria && estudianteBDD.redComunitaria.some(r => r.equals(targetComunidadId))
     const esGlobalTarget = Boolean(redDoc.esGlobal)
@@ -719,6 +737,10 @@ const publicarArticulo = async (req, res) => {
     if (!estudianteBDD.redComunitaria.some(r => r.equals(comunidadId))) {
       return res.status(403).json({ msg: "No perteneces a esta red comunitaria" })
     }
+
+    const redDoc = await RedComunitaria.findById(comunidadId)
+    if (!redDoc) return res.status(404).json({ msg: 'Red comunitaria no encontrada' })
+    if (redDoc.deshabilitada) return res.status(403).json({ msg: 'No puedes publicar artículos en una red deshabilitada' })
 
     const nuevoArticulo = new Articulo({
       autorId: estudianteId,

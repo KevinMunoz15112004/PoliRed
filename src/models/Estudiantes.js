@@ -30,6 +30,12 @@ const estudianteSchema = new Schema({
     type: Boolean,
     default: false
   },
+  biografia: {
+    type: String,
+    trim: true,
+    maxlength: 150,
+    default: null
+  },
   email: {
     type: String,
     required: true,

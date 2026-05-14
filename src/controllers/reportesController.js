@@ -6,6 +6,8 @@ import ReporteApp from '../models/ReporteApp.js'
 import Estudiante from '../models/Estudiantes.js'
 import AdminRed from '../models/adminRedes.js'
 import SolicitudVerificacion from '../models/SolicitudVerificacion.js'
+import SolicitudRehabilitarRed from '../models/SolicitudRehabilitarRed.js'
+import SolicitudHabilitarUsuario from '../models/SolicitudHabilitarUsuario.js'
 
 // Crear reporte sobre una publicación (llega al admin de la red correspondiente)
 const crearReportePublicacion = async (req, res) => {
@@ -239,6 +241,17 @@ const crearSolicitudVerificacion = async (req, res) => {
       return res.status(403).json({ msg: 'Solo el admin asignado de la red puede solicitar verificación/oficialización' })
     }
 
+    // Asegurar que el redId enviado corresponde a la red asignada activa del admin (si existe en el req.user)
+    if (req.user && req.user.redAsignada) {
+      try {
+        if (req.user.redAsignada.toString() !== redId.toString()) {
+          return res.status(403).json({ msg: 'Solo puedes solicitar verificación para la red que tienes asignada' })
+        }
+      } catch (err) {
+        // ignore conversion errors
+      }
+    }
+
     if (!solicitarVerificada && !solicitarOficial) {
       return res.status(400).json({ msg: 'Debes solicitar al menos "verificada" o "oficial"' })
     }
@@ -247,6 +260,158 @@ const crearSolicitudVerificacion = async (req, res) => {
 
     const pop = await SolicitudVerificacion.findById(nuevaSolicitud._id).populate('redId', 'nombre').populate('solicitante', 'nombre apellido email')
     return res.status(201).json({ msg: 'Solicitud creada', solicitud: pop })
+  } catch (error) {
+    console.error(error)
+    return res.status(500).json({ msg: 'Error en el servidor' })
+  }
+}
+
+// AdminRed: crear solicitud para rehabilitar (reactivar) una red deshabilitada
+const crearSolicitudRehabilitar = async (req, res) => {
+  try {
+    const solicitanteId = req.user?._id
+    const { redId, descripcion } = req.body
+
+    if (!redId || !descripcion) return res.status(400).json({ msg: 'Faltan datos requeridos' })
+
+    const red = await RedComunitaria.findById(redId)
+    if (!red) return res.status(404).json({ msg: 'Red no encontrada' })
+
+    // Verificar que el solicitante es admin de la red
+    const adminRelation = await AdminRed.findOne({ usuarioId: solicitanteId, redId: redId, estado: 'activo' })
+    const esCreador = red.creadaPor && red.creadaPor.equals(solicitanteId)
+    if (!adminRelation && !esCreador) {
+      return res.status(403).json({ msg: 'Solo el admin asignado de la red puede solicitar rehabilitación' })
+    }
+
+    if (!red.deshabilitada) return res.status(400).json({ msg: 'La red no está deshabilitada' })
+
+    // Evitar solicitudes duplicadas pendientes por el mismo solicitante y red
+    const existePendiente = await SolicitudRehabilitarRed.findOne({ redId, solicitante: solicitanteId, estado: 'pendiente' })
+    if (existePendiente) return res.status(400).json({ msg: 'Ya existe una solicitud pendiente para esta red' })
+
+    const nuevaSolicitud = await SolicitudRehabilitarRed.create({ redId, solicitante: solicitanteId, descripcion: descripcion.trim() })
+
+    const pop = await SolicitudRehabilitarRed.findById(nuevaSolicitud._id).populate('redId', 'nombre').populate('solicitante', 'nombre apellido email')
+    return res.status(201).json({ msg: 'Solicitud creada', solicitud: pop })
+  } catch (error) {
+    console.error(error)
+    return res.status(500).json({ msg: 'Error en el servidor' })
+  }
+}
+
+// SuperAdmin: listar solicitudes de rehabilitar
+const listarSolicitudesRehabilitar = async (req, res) => {
+  try {
+    const solicitudes = await SolicitudRehabilitarRed.find().populate('redId', 'nombre deshabilitada').populate('solicitante', 'nombre apellido email').sort({ createdAt: -1 })
+    return res.status(200).json({ solicitudes })
+  } catch (error) {
+    console.error(error)
+    return res.status(500).json({ msg: 'Error en el servidor' })
+  }
+}
+
+// SuperAdmin: resolver solicitud de rehabilitar
+const resolverSolicitudRehabilitar = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { accion, respuesta } = req.body
+
+    if (!['Aprobar', 'Rechazar'].includes(accion)) return res.status(400).json({ msg: 'Acción inválida. Solo "Aprobar" o "Rechazar"' })
+
+    const solicitud = await SolicitudRehabilitarRed.findById(id)
+    if (!solicitud) return res.status(404).json({ msg: 'Solicitud no encontrada' })
+
+    const red = await RedComunitaria.findById(solicitud.redId)
+    if (!red) return res.status(404).json({ msg: 'Red no encontrada' })
+
+    if (accion === 'Rechazar') {
+      await SolicitudRehabilitarRed.findByIdAndDelete(id)
+      return res.status(200).json({ msg: 'Solicitud rechazada y eliminada' })
+    }
+
+    // Aprobar: reactivar red
+    red.deshabilitada = false
+    await red.save()
+
+    solicitud.estado = 'aprobada'
+    if (respuesta) solicitud.respuesta = respuesta
+    await solicitud.save()
+
+    const pop = await SolicitudRehabilitarRed.findById(solicitud._id).populate('redId', 'nombre deshabilitada').populate('solicitante', 'nombre apellido email')
+    return res.status(200).json({ msg: 'Solicitud aprobada. Red reactivada', solicitud: pop })
+  } catch (error) {
+    console.error(error)
+    return res.status(500).json({ msg: 'Error en el servidor' })
+  }
+}
+
+// Estudiante suspendido crea solicitud para ser habilitado
+const crearSolicitudHabilitarUsuario = async (req, res) => {
+  try {
+    const solicitanteId = req.user?._id
+    const { motivo } = req.body
+
+    if (!motivo) return res.status(400).json({ msg: 'Falta el motivo de la solicitud' })
+
+    const estudiante = await Estudiante.findById(solicitanteId)
+    if (!estudiante) return res.status(404).json({ msg: 'Usuario no encontrado' })
+
+    if (!estudiante.suspendido) return res.status(400).json({ msg: 'El usuario no está suspendido' })
+
+    // Evitar duplicados pendientes
+    const existePendiente = await SolicitudHabilitarUsuario.findOne({ solicitante: solicitanteId, estado: 'pendiente' })
+    if (existePendiente) return res.status(400).json({ msg: 'Ya existe una solicitud pendiente' })
+
+    const nueva = await SolicitudHabilitarUsuario.create({ solicitante: solicitanteId, motivo: motivo.trim() })
+    const pop = await SolicitudHabilitarUsuario.findById(nueva._id).populate('solicitante', 'nombre apellido email')
+    return res.status(201).json({ msg: 'Solicitud creada', solicitud: pop })
+  } catch (error) {
+    console.error(error)
+    return res.status(500).json({ msg: 'Error en el servidor' })
+  }
+}
+
+// SuperAdmin: listar solicitudes
+const listarSolicitudesHabilitarUsuarios = async (req, res) => {
+  try {
+    const solicitudes = await SolicitudHabilitarUsuario.find().populate('solicitante', 'nombre apellido email suspendido').sort({ createdAt: -1 })
+    return res.status(200).json({ solicitudes })
+  } catch (error) {
+    console.error(error)
+    return res.status(500).json({ msg: 'Error en el servidor' })
+  }
+}
+
+// SuperAdmin: resolver solicitud (Aprobar/Rechazar)
+const resolverSolicitudHabilitarUsuario = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { accion, respuesta } = req.body
+
+    if (!['Aprobar', 'Rechazar'].includes(accion)) return res.status(400).json({ msg: 'Acción inválida. Solo "Aprobar" o "Rechazar"' })
+
+    const solicitud = await SolicitudHabilitarUsuario.findById(id)
+    if (!solicitud) return res.status(404).json({ msg: 'Solicitud no encontrada' })
+
+    const estudiante = await Estudiante.findById(solicitud.solicitante)
+    if (!estudiante) return res.status(404).json({ msg: 'Estudiante no encontrado' })
+
+    if (accion === 'Rechazar') {
+      await SolicitudHabilitarUsuario.findByIdAndDelete(id)
+      return res.status(200).json({ msg: 'Solicitud rechazada y eliminada' })
+    }
+
+    // Aprobar: marcar suspendido = false
+    estudiante.suspendido = false
+    await estudiante.save()
+
+    solicitud.estado = 'aprobada'
+    if (respuesta) solicitud.respuesta = respuesta
+    await solicitud.save()
+
+    const pop = await SolicitudHabilitarUsuario.findById(solicitud._id).populate('solicitante', 'nombre apellido email suspendido')
+    return res.status(200).json({ msg: 'Solicitud aprobada. Usuario habilitado', solicitud: pop })
   } catch (error) {
     console.error(error)
     return res.status(500).json({ msg: 'Error en el servidor' })
@@ -300,4 +465,4 @@ const resolverSolicitudVerificacion = async (req, res) => {
   }
 }
 
-export { crearReportePublicacion, crearReporteApp, crearReporteUsuario, listarReportesUsuarios, listarReportesApp, resolverReporteUsuario, resolverReporteApp, resolverReportePublicacionAdmin, listarReportesAdminRed, crearSolicitudVerificacion, listarSolicitudesVerificacion, resolverSolicitudVerificacion }
+export { crearReportePublicacion, crearReporteApp, crearReporteUsuario, listarReportesUsuarios, listarReportesApp, resolverReporteUsuario, resolverReporteApp, resolverReportePublicacionAdmin, listarReportesAdminRed, crearSolicitudVerificacion, listarSolicitudesVerificacion, resolverSolicitudVerificacion, crearSolicitudRehabilitar, listarSolicitudesRehabilitar, resolverSolicitudRehabilitar, crearSolicitudHabilitarUsuario, listarSolicitudesHabilitarUsuarios, resolverSolicitudHabilitarUsuario }

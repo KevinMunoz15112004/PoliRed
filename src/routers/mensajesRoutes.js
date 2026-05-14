@@ -1,48 +1,21 @@
-import express from 'express';
-import Mensaje from '../models/Mensajes.js';
-import { verifyToken } from '../middlewares/auth.js';
-import mongoose from 'mongoose';
-import Estudiantes from '../models/Estudiantes.js';
-
-const router = express.Router();
-import validators from '../validators/index.js'
+import { Router } from 'express'
+import { verifyToken } from '../middlewares/auth.js'
 import validateResult from '../validators/validateResult.js'
+import validators from '../validators/index.js'
+import { crearConversacion, listarConversaciones, listarMensajesConversacion, enviarMensajeConversacion } from '../controllers/mensajesController.js'
 
-router.get('/mensajes/historial/:estudianteA/:estudianteB', verifyToken, validators.mongoIdParam('estudianteA'), validators.mongoIdParam('estudianteB'), validateResult, async (req, res) => {
-  const { estudianteA, estudianteB } = req.params;
+const router = Router()
 
-  if (!mongoose.Types.ObjectId.isValid(estudianteA) || !mongoose.Types.ObjectId.isValid(estudianteB)) {
-    return res.status(400).json({ msg: 'Uno o ambos IDs no son válidos' })
-  }
+// Crear o reutilizar conversación 1:1 con otro estudiante
+router.post('/mensajes/conversaciones', verifyToken, validators.mongoIdBody('targetId'), validateResult, crearConversacion)
 
-  if (!estudianteA || !estudianteB) {
-    return res.status(400).json({ msg: 'Faltan parámetros requeridos en la URL' })
-  }
+// Listar conversaciones del usuario autenticado
+router.get('/mensajes/conversaciones', verifyToken, listarConversaciones)
 
-  try {
+// Enviar mensaje (persistir)
+router.post('/mensajes/conversaciones/:conversacionId', verifyToken, validators.mongoIdParam('conversacionId'), validateResult, enviarMensajeConversacion)
 
-     const [existeA, existeB] = await Promise.all([
-      Estudiantes.exists({ _id: estudianteA }),
-      Estudiantes.exists({ _id: estudianteB })
-    ])
+// Obtener historial paginado de una conversación
+router.get('/mensajes/conversaciones/:conversacionId', verifyToken, validators.mongoIdParam('conversacionId'), validateResult, listarMensajesConversacion)
 
-    if (!existeA || !existeB) {
-      return res.status(404).json({ msg: 'Uno o ambos estudiantes no existen' })
-    }
-
-    const mensajes = await Mensaje.find({
-      $or: [
-        { autor: estudianteA, destinatario: estudianteB },
-        { autor: estudianteB, destinatario: estudianteA }
-      ]
-    })
-    .sort({ createdAt: 1 })
-    .populate('autor', 'nombre apellido');
-
-    res.json(mensajes);
-  } catch (error) {
-    res.status(500).json({ msg: 'Error al obtener mensajes' });
-  }
-});
-
-export default router;
+export default router

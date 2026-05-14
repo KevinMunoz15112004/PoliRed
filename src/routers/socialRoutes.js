@@ -16,10 +16,7 @@ import {
   guardarPublicacion,
   quitarGuardadoPublicacion,
   listarPublicacionesGuardadas,
-  crearConversacion,
-  listarConversaciones,
-  enviarMensajeConversacion,
-  listarMensajesConversacion,
+  // messaging endpoints moved to mensajesRoutes
   listarNotificaciones,
   marcarNotificacionLeida,
   subirArchivoMultimedia,
@@ -54,10 +51,7 @@ router.get('/usuarios/guardados', verifyToken, listarPublicacionesGuardadas)
 
 // Note: feed and per-red feed endpoints consolidated in estudiantesRoutes
 
-router.post('/mensajes/conversaciones', verifyToken, requirePerfilCompleto, crearConversacion)
-router.get('/mensajes/conversaciones', verifyToken, listarConversaciones)
-router.post('/mensajes/conversaciones/:conversacionId', verifyToken, requirePerfilCompleto, validators.mongoIdParam('conversacionId'), validateResult, enviarMensajeConversacion)
-router.get('/mensajes/conversaciones/:conversacionId', verifyToken, validators.mongoIdParam('conversacionId'), validateResult, listarMensajesConversacion)
+// Messaging routes are exposed via `mensajesRoutes.js` to avoid duplication
 
 router.get('/notificaciones', verifyToken, listarNotificaciones)
 router.patch('/notificaciones/:id/leida', verifyToken, validators.mongoIdParam('id'), validateResult, marcarNotificacionLeida)

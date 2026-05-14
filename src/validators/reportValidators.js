@@ -43,4 +43,8 @@ const reportUsuarioValidator = [
   body('descripcion').if(body('tipo').equals('Otro')).exists().withMessage('Descripcion obligatoria para "Otro"').bail().isString().withMessage('La descripcion debe ser texto').bail().trim().notEmpty().withMessage('La descripcion no puede estar vacía')
 ]
 
-export { reportPublicacionValidator, reportAppValidator, reportUsuarioValidator }
+const rehabilitarUsuarioValidator = [
+  body('motivo').exists().withMessage('El motivo es obligatorio').bail().isString().withMessage('Motivo inválido').bail().trim().notEmpty().withMessage('El motivo no puede estar vacío')
+]
+
+export { reportPublicacionValidator, reportAppValidator, reportUsuarioValidator, rehabilitarUsuarioValidator }

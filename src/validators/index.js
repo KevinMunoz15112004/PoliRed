@@ -34,6 +34,8 @@ export const validators = {
   reportPublicacionValidator: report.reportPublicacionValidator,
   reportAppValidator: report.reportAppValidator,
   reportUsuarioValidator: report.reportUsuarioValidator
+  ,
+  rehabilitarUsuarioValidator: report.rehabilitarUsuarioValidator
 }
 
 export default validators

@@ -4,7 +4,7 @@ const mensajeSchema = new Schema({
   conversacionId: {
     type: Schema.Types.ObjectId,
     ref: 'Conversacion',
-    default: null,
+    required: true,
     index: true
   },
   autor: {
@@ -21,13 +21,12 @@ const mensajeSchema = new Schema({
     type: String,
     required: true,
     trim: true
-  },
-  timestamp: {
-    type: Date,
-    default: Date.now
   }
 }, {
   timestamps: true
 });
+
+// Index to support most common query: fetch messages by conversacion sorted by createdAt desc
+mensajeSchema.index({ conversacionId: 1, createdAt: -1 });
 
 export default model('Mensaje', mensajeSchema, 'mensajes');

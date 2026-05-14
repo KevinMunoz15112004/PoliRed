@@ -32,6 +32,11 @@ const redComunitariaSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  // Si la red ha sido deshabilitada por un SuperAdmin
+  deshabilitada: {
+    type: Boolean,
+    default: false
+  },
   fotoPerfil: {
     type: String,
     default: null

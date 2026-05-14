@@ -521,6 +521,11 @@ const actualizarRed = async (req, res) => {
       camposActualizados.descripcion = descripcion
     }
 
+    // Permitir a SuperAdmin deshabilitar o habilitar la red
+    if (typeof req.body.deshabilitada !== 'undefined') {
+      camposActualizados.deshabilitada = Boolean(req.body.deshabilitada)
+    }
+
     const redActualizada = await RedComunitaria.findByIdAndUpdate(
       id,
       camposActualizados,

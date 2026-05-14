@@ -40,6 +40,13 @@ const actualizarPerfilValidator = [
   trimAndNotEmpty('nombre', { optional: true }),
   trimAndNotEmpty('apellido', { optional: true }),
   trimAndNotEmpty('direccion', { optional: true }),
+  // biografia: optional, string, max 150 chars
+  body('biografia')
+    .optional()
+    .isString().withMessage('La biografía debe ser texto')
+    .bail()
+    .trim()
+    .isLength({ max: 150 }).withMessage('La biografía no puede exceder 150 caracteres'),
   // celular handled as phone in commonValidators
   // email normalized if provided
   normalizeEmail('email', { optional: true })

@@ -49,6 +49,12 @@ const crearPublicacion = async (req, res) => {
       return res.status(400).json({ msg: 'ID de comunidad no válido' })
     }
 
+    if (comunidadId) {
+      const red = await RedComunitaria.findById(comunidadId)
+      if (!red) return res.status(404).json({ msg: 'Comunidad no encontrada' })
+      if (red.deshabilitada) return res.status(403).json({ msg: 'No puedes publicar en una red deshabilitada' })
+    }
+
     const publicacion = await Publicacion.create({
       titulo: titulo.trim(),
       contenido: contenido ? contenido.trim() : '',
@@ -115,6 +121,12 @@ const darLikePublicacion = async (req, res) => {
     const publicacion = await Publicacion.findById(id)
     if (!publicacion) {
       return res.status(404).json({ msg: 'Publicación no encontrada' })
+    }
+
+    // Si la publicación pertenece a una comunidad deshabilitada, bloquear
+    if (publicacion.comunidadId) {
+      const red = await RedComunitaria.findById(publicacion.comunidadId)
+      if (red && red.deshabilitada) return res.status(403).json({ msg: 'No puedes dar like en publicaciones de una red deshabilitada' })
     }
 
     const yaTieneLike = publicacion.likes.some((likeId) => likeId.equals(estudianteId))
@@ -185,6 +197,11 @@ const crearComentarioPublicacion = async (req, res) => {
       return res.status(404).json({ msg: 'Publicación no encontrada' })
     }
 
+    if (publicacion.comunidadId) {
+      const red = await RedComunitaria.findById(publicacion.comunidadId)
+      if (red && red.deshabilitada) return res.status(403).json({ msg: 'No puedes comentar en publicaciones de una red deshabilitada' })
+    }
+
     const comentario = await Comentario.create({
       postId: publicacion._id,
       userId: estudianteId,
@@ -233,6 +250,14 @@ const responderComentario = async (req, res) => {
     const comentarioPadre = await Comentario.findById(comentarioId)
     if (!comentarioPadre) {
       return res.status(404).json({ msg: 'Comentario padre no encontrado' })
+    }
+
+    if (comentarioPadre.postId) {
+      const post = await Publicacion.findById(comentarioPadre.postId)
+      if (post && post.comunidadId) {
+        const red = await RedComunitaria.findById(post.comunidadId)
+        if (red && red.deshabilitada) return res.status(403).json({ msg: 'No puedes responder comentarios en una red deshabilitada' })
+      }
     }
 
     const respuesta = await Comentario.create({
@@ -382,21 +407,10 @@ const salirDeRedComunitaria = async (req, res) => {
   return res.status(501).json({ msg: 'Not implemented: salirDeRedComunitaria' })
 }
 
-const crearConversacion = async (req, res) => {
-  return res.status(501).json({ msg: 'Not implemented: crearConversacion' })
-}
-
-const listarConversaciones = async (req, res) => {
-  return res.status(501).json({ msg: 'Not implemented: listarConversaciones' })
-}
-
-const enviarMensajeConversacion = async (req, res) => {
-  return res.status(501).json({ msg: 'Not implemented: enviarMensajeConversacion' })
-}
-
-const listarMensajesConversacion = async (req, res) => {
-  return res.status(501).json({ msg: 'Not implemented: listarMensajesConversacion' })
-}
+// Note: messaging endpoints are centralized in the `mensajes` module
+// (controllers, routes and socket). This controller no longer proxies
+// messaging functions to avoid duplication and keep a single source
+// of truth for private messaging logic.
 
 const listarNotificaciones = async (req, res) => {
   try {
@@ -700,10 +714,7 @@ export {
   listarPublicacionesGuardadas,
   unirseARedAprobada,
   salirDeRedComunitaria,
-  crearConversacion,
-  listarConversaciones,
-  enviarMensajeConversacion,
-  listarMensajesConversacion,
+  // messaging functions intentionally removed from this module
   listarNotificaciones,
   marcarNotificacionLeida,
   subirArchivoMultimedia,

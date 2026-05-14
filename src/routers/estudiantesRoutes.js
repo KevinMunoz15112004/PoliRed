@@ -1,11 +1,11 @@
 import {Router} from 'express'
 import { registroEstudiante, confirmarMailEstudiante, comprobarTokenPasswordEstudiante, recuperarPasswordEstudiante, crearNuevoPasswordEstudiante, perfilEstudiante, actualizarUsername, completarPerfil, actualizarPerfilEstudiante, actualizarPasswordEstudiante, crearPublicacion, unirseARedComunitaria, salirseDeRedComunitaria, listarPublicaciones, listarRedesDelEstudiante, listarPublicacionesPorRed, listarPublicacionesGlobal, listarPublicacionesComunidades, obtenerRedesComunitarias, obtenerRedesExplorar, obtenerPerfilRed, publicarArticulo, listarArticulosPorRed, eliminarArticulo, actualizarArticulo, actualizarPublicacion, eliminarPublicacion, comprarArticulo, listarTodosArticulos, obtenerEstudiantes } 
 from '../controllers/estudiantesController.js'
-import { crearSolicitudVerificacion } from '../controllers/reportesController.js'
 import { requirePerfilCompleto, disallowPerfilCompleto } from '../middlewares/checkPerfilCompleto.js'
 import { verifyToken } from '../middlewares/auth.js'
 import validators from '../validators/index.js'
 import validateResult from '../validators/validateResult.js'
+import { crearSolicitudHabilitarUsuario } from '../controllers/reportesController.js'
 
 const router = Router()
 
@@ -46,10 +46,12 @@ router.get('/publicaciones/comunitarias', listarPublicacionesComunidades)
 router.get('/estudiantes/listar/redes', verifyToken, listarRedesDelEstudiante)
 router.post('/estudiantes/unirse/red', verifyToken, validators.mongoIdBody('redId'), validateResult, unirseARedComunitaria)
 router.post('/estudiantes/salirse/red', verifyToken, validators.mongoIdBody('redId'), validateResult, salirseDeRedComunitaria)
-router.post('/redes/solicitar-verificacion', verifyToken, validators.mongoIdBody('redId'), validators.trimAndNotEmpty('descripcion'), validateResult, crearSolicitudVerificacion)
 
 //Rutas para la gestión de mensajes
 router.get('/cargar/estudiantes', verifyToken, obtenerEstudiantes)
+
+// Solicitud para que un estudiante suspendido pida ser habilitado
+router.post('/estudiantes/solicitud-habilitar', verifyToken, validators.rehabilitarUsuarioValidator, validateResult, crearSolicitudHabilitarUsuario)
 
 
 export default router
