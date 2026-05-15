@@ -2,6 +2,7 @@ import mongoose from 'mongoose'
 import Conversacion from '../models/Conversaciones.js'
 import Mensaje from '../models/Mensajes.js'
 import Estudiante from '../models/Estudiantes.js'
+import socketEvents from '../socketEvents.js'
 
 // Compute deterministic pairHash for two user ids (sorted)
 const computePairHash = (a, b) => [String(a), String(b)].sort().join('_')
@@ -49,14 +50,27 @@ async function getConversationsForUser(userId) {
     .populate('participantes', 'nombre apellido username fotoPerfil')
     .lean()
 
+  // Calcular unreadCount para cada conversación con una sola agregación
+  const convIds = conversaciones.map(c => c._id).filter(Boolean)
+  let unreadMap = {}
+  if (convIds.length > 0) {
+    const counts = await Mensaje.aggregate([
+      { $match: { conversacionId: { $in: convIds.map(id => mongoose.Types.ObjectId(id)) }, destinatario: mongoose.Types.ObjectId(userId), leido: false } },
+      { $group: { _id: '$conversacionId', count: { $sum: 1 } } }
+    ])
+    unreadMap = counts.reduce((acc, cur) => { acc[String(cur._id)] = cur.count; return acc }, {})
+  }
+
   return conversaciones.map(c => {
     const otros = c.participantes.filter(p => String(p._id) !== String(userId))
     const otro = otros.length > 0 ? otros[0] : null
+    const unread = unreadMap[String(c._id)] || 0
     return {
       id: c._id,
       participante: otro,
       ultimoMensaje: c.ultimoMensaje || null,
-      ultimaActividad: c.ultimaActividad || c.updatedAt
+      ultimaActividad: c.ultimaActividad || c.updatedAt,
+      unreadCount: unread
     }
   })
 }
@@ -72,6 +86,29 @@ async function getMessagesForConversation(conversacionId, userId, page = 1, limi
   const p = Math.max(parseInt(page, 10) || 1, 1)
   const l = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100)
   const skip = (p - 1) * l
+
+  // Primero identificar mensajes que deben marcarse como leídos
+  let mensajesIdsMarcados = []
+  try {
+    const pendientes = await Mensaje.find({ conversacionId, destinatario: userId, leido: false }).select('_id').lean()
+    mensajesIdsMarcados = pendientes.map(d => d._id)
+    if (mensajesIdsMarcados.length > 0) {
+      await Mensaje.updateMany({ _id: { $in: mensajesIdsMarcados } }, { $set: { leido: true } })
+      // Notificar a capa de sockets que estos mensajes fueron leídos
+      try {
+        socketEvents.emit('mensajes_leidos', {
+          conversacionId: String(conversacionId),
+          lectorId: String(userId),
+          mensajesActualizados: mensajesIdsMarcados.map(String),
+          timestamp: new Date().toISOString()
+        })
+      } catch (ee) {
+        console.error('Error emitiendo evento mensajes_leidos:', ee)
+      }
+    }
+  } catch (e) {
+    console.error('Error preparando marcado de leídos:', e)
+  }
 
   const total = await Mensaje.countDocuments({ conversacionId })
   const mensajes = await Mensaje.find({ conversacionId })

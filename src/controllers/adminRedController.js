@@ -288,7 +288,7 @@ const eliminarEstudianteDeRed = async (req, res) => {
     }
 
     if (!redAsignadaId) return res.status(403).json({ msg: 'No autorizado para esta acción' })
-    if (!estudiante.redComunitaria || !estudiante.redComunitaria.includes(redAsignadaId.toString())) {
+    if (!estudiante.redComunitaria || !estudiante.redComunitaria.some(r => String(r) === String(redAsignadaId))) {
       return res.status(403).json({ msg: 'No puedes modificar estudiantes que no pertenecen a tu red comunitaria' })
     }
 

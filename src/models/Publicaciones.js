@@ -1,7 +1,8 @@
 import mongoose from "mongoose";
 
 const TIPOS_CONTENIDO = ['texto', 'imagen', 'video'];
-const CATEGORIAS_PUBLICACION = ['venta', 'comunidad', 'memes', 'noticias'];
+// Normal publications categories (internal lowercase)
+const CATEGORIAS_PUBLICACION = ['comunidad', 'noticias', 'cursos'];
 
 const comentarioSchema = new mongoose.Schema({
   autorId: {
@@ -46,7 +47,7 @@ const publicacionSchema = new mongoose.Schema({
   categoria: {
     type: String,
     enum: CATEGORIAS_PUBLICACION,
-    default: 'comunidad'
+    required: true
   },
   mediaUrl: {
     type: String,

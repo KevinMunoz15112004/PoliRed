@@ -42,6 +42,23 @@ const crearPublicacion = async (req, res) => {
     const { titulo, contenido, comunidadId, tipoContenido, categoria, mediaUrl } = req.body
     const estudianteId = req.user?._id
 
+    // Categoria es obligatoria
+    if (!categoria) return res.status(400).json({ msg: 'Campo categoría obligatorio' })
+    const cat = String(categoria).trim().toLowerCase()
+    const allowed = ['comunidad', 'noticias', 'cursos']
+    if (!allowed.includes(cat)) return res.status(400).json({ msg: `Categoría inválida. Valores permitidos: ${allowed.join(', ')}` })
+
+    let targetComunidadId = comunidadId
+    if (cat === 'comunidad') {
+      if (!targetComunidadId) return res.status(400).json({ msg: 'La categoría "Comunidad" requiere el id de una red comunitaria' })
+    } else {
+      if (!targetComunidadId) {
+        const redGlobal = await RedComunitaria.findOne({ esGlobal: true })
+        if (!redGlobal) return res.status(500).json({ msg: 'No hay red global configurada' })
+        targetComunidadId = redGlobal._id
+      }
+    }
+
     // Validaciones básicas
     if (!titulo || !titulo.trim()) return res.status(400).json({ msg: 'Título requerido' })
 
@@ -58,9 +75,9 @@ const crearPublicacion = async (req, res) => {
     const publicacion = await Publicacion.create({
       titulo: titulo.trim(),
       contenido: contenido ? contenido.trim() : '',
-      comunidadId: comunidadId || null,
+      comunidadId: targetComunidadId || null,
       tipoContenido: tipoContenido || 'texto',
-      categoria: categoria || null,
+      categoria: cat,
       mediaUrl: mediaUrl || null,
       autorId: estudianteId
     })

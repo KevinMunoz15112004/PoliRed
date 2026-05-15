@@ -6,9 +6,7 @@ import { sendMailToRegister, sendMailToRecoveryPasswordE } from '../config/nodem
 import SuperAdmin from '../models/SuperAdmin.js'
 import Publicacion from "../models/Publicaciones.js"
 import RedComunitaria from '../models/RedComunitaria.js'
-import { Stripe } from "stripe"
-
-const stripe = new Stripe(`${process.env.STRIPE_SECRET_KEY}`)
+// Stripe payment logic removed per request
 
 // NOTE: login functionality moved to /api/auth/login (authController)
 
@@ -58,10 +56,13 @@ const registroEstudiante = async (req, res) => {
     for (const redId of nuevoEstudiante.redComunitaria) {
       try {
         const red = await RedComunitaria.findById(redId)
-        if (red && !red.miembros.includes(nuevoEstudiante._id)) {
-          red.miembros.push(nuevoEstudiante._id)
-          red.cantidadMiembros = red.miembros.length
-          await red.save()
+        if (red) {
+          const already = red.miembros && red.miembros.some(m => (m && m.equals && m.equals(nuevoEstudiante._id)) || String(m) === String(nuevoEstudiante._id))
+          if (!already) {
+            red.miembros.push(nuevoEstudiante._id)
+            red.cantidadMiembros = red.miembros.length
+            await red.save()
+          }
         }
       } catch (err) {
         console.error('Error actualizando miembros de la red:', err)
@@ -168,16 +169,25 @@ const crearNuevoPasswordEstudiante = async (req, res) => {
   return res.status(200).json({ msg: "Felicitaciones, ya puedes iniciar sesión con tu nuevo password" })
 }
 
-const perfilEstudiante = (req, res) => {
-  if (req.user) {
+const perfilEstudiante = async (req, res) => {
+  try {
+    if (!req.user) return res.status(401).json({ msg: 'Usuario no autenticado' })
+
+    // Remove sensitive/internal fields
     delete req.user.token
     delete req.user.confirmEmail
     delete req.user.createdAt
     delete req.user.updatedAt
     delete req.user.__v
-    return res.status(200).json(req.user)
+
+    // Count total publicaciones authored by this estudiante (across todas las redes)
+    const publicacionesCount = await Publicacion.countDocuments({ autorId: req.user._id })
+
+    return res.status(200).json({ ...req.user, publicacionesCount })
+  } catch (error) {
+    console.error('Error en perfilEstudiante:', error)
+    return res.status(500).json({ msg: 'Error en el servidor' })
   }
-  return res.status(401).json({ msg: 'Usuario no autenticado' })
 }
 
 const actualizarUsername = async (req, res) => {
@@ -351,8 +361,21 @@ const actualizarPasswordEstudiante = async (req, res) => {
 const obtenerRedesComunitarias = async (req, res) => {
   try {
     // Excluir redes globales del listado general
-    const redes = await RedComunitaria.find({ esGlobal: { $ne: true } }, 'nombre descripcion cantidadMiembros esOficial esVerificada')
-    res.status(200).json(redes)
+    const redes = await RedComunitaria.find({ esGlobal: { $ne: true } })
+      .select('nombre descripcion cantidadMiembros esOficial esVerificada fotoPerfil')
+      .lean()
+
+    const salida = redes.map(r => ({
+      id: r._id,
+      nombre: r.nombre,
+      descripcion: r.descripcion,
+      cantidadMiembros: r.cantidadMiembros,
+      esOficial: r.esOficial,
+      esVerificada: r.esVerificada,
+      fotoPerfil: r.fotoPerfil || null
+    }))
+
+    res.status(200).json(salida)
   } catch (error) {
     console.error('Error al obtener redes comunitarias:', error)
     res.status(500).json({ msg: 'Error del servidor' })
@@ -362,8 +385,21 @@ const obtenerRedesComunitarias = async (req, res) => {
 const obtenerRedesExplorar = async (req, res) => {
   try {
     // Solo redes marcadas como globales
-    const redes = await RedComunitaria.find({ esGlobal: true }).select('nombre descripcion cantidadMiembros esOficial esVerificada')
-    res.status(200).json(redes)
+    const redes = await RedComunitaria.find({ esGlobal: true })
+      .select('nombre descripcion cantidadMiembros esOficial esVerificada fotoPerfil')
+      .lean()
+
+    const salida = redes.map(r => ({
+      id: r._id,
+      nombre: r.nombre,
+      descripcion: r.descripcion,
+      cantidadMiembros: r.cantidadMiembros,
+      esOficial: r.esOficial,
+      esVerificada: r.esVerificada,
+      fotoPerfil: r.fotoPerfil || null
+    }))
+
+    res.status(200).json(salida)
   } catch (error) {
     console.error('Error al obtener redes para explorar:', error)
     res.status(500).json({ msg: 'Error del servidor' })
@@ -424,7 +460,7 @@ const listarRedesDelEstudiante = async (req, res) => {
     const estudianteId = req.user?._id
 
     const estudiante = await Estudiante.findById(estudianteId)
-      .populate('redComunitaria', 'nombre descripcion')
+      .populate('redComunitaria', 'nombre descripcion fotoPerfil')
 
     if (!estudiante) {
       return res.status(404).json({ msg: "Estudiante no encontrado" })
@@ -486,19 +522,33 @@ const salirseDeRedComunitaria = async (req, res) => {
 
 const crearPublicacion = async (req, res) => {
   try {
-    const { titulo, contenido, comunidadId } = req.body
+    const { titulo, contenido, comunidadId, categoria } = req.body
+    // Ensure categoria provided
+    if (!categoria) return res.status(400).json({ msg: 'Campo categoría obligatorio' })
     const estudianteId = req.user?._id
 
-    let targetComunidadId = comunidadId
+    // Validar categoría (internamente lowercase)
+    const cat = String(categoria).trim().toLowerCase()
+    const allowed = ['comunidad', 'noticias', 'cursos']
+    if (!allowed.includes(cat)) {
+      return res.status(400).json({ msg: `Categoría inválida. Valores permitidos: ${allowed.join(', ')}` })
+    }
 
-    // Si no se envía comunidadId, usar la red global por defecto
+    let targetComunidadId = comunidadId
     let redGlobal = null
-    if (!targetComunidadId) {
-      redGlobal = await RedComunitaria.findOne({ esGlobal: true })
-      if (!redGlobal) return res.status(500).json({ msg: 'No hay red global configurada' })
-      targetComunidadId = redGlobal._id.toString()
+
+    // Reglas específicas por categoría
+    if (cat === 'comunidad') {
+      // Must provide comunidadId and it must NOT be global
+      if (!targetComunidadId) return res.status(400).json({ msg: 'La categoría "Comunidad" requiere el id de una red comunitaria' })
+      // comunidadId format validated by validators in routes
     } else {
-      // El formato de `targetComunidadId` es validado por los validators en las rutas
+      // noticias/cursos: comunidadId optional -> default to global
+      if (!targetComunidadId) {
+        redGlobal = await RedComunitaria.findOne({ esGlobal: true })
+        if (!redGlobal) return res.status(500).json({ msg: 'No hay red global configurada' })
+        targetComunidadId = redGlobal._id.toString()
+      }
     }
 
     const estudianteBDD = await Estudiante.findById(estudianteId)
@@ -517,23 +567,31 @@ const crearPublicacion = async (req, res) => {
     const pertenece = estudianteBDD.redComunitaria && estudianteBDD.redComunitaria.some(r => r.equals(targetComunidadId))
     const esGlobalTarget = Boolean(redDoc.esGlobal)
 
-    if (!pertenece) {
-      if (esGlobalTarget) {
-        try {
-          estudianteBDD.redComunitaria = estudianteBDD.redComunitaria || []
-          estudianteBDD.redComunitaria.push(redDoc._id)
-          await estudianteBDD.save()
+    if (cat === 'comunidad') {
+      // comunidad: user must belong to that red (no auto-join), and red must not be global
+      if (esGlobalTarget) return res.status(400).json({ msg: 'No se puede publicar categoría Comunidad en la red global' })
+      if (!pertenece) return res.status(403).json({ msg: 'No perteneces a esta red comunitaria' })
+    } else {
+      // noticias/cursos: if target is global and user not member, auto-join; if non-global and user not member -> forbid
+      if (!pertenece) {
+        if (esGlobalTarget) {
+          try {
+            estudianteBDD.redComunitaria = estudianteBDD.redComunitaria || []
+            estudianteBDD.redComunitaria.push(redDoc._id)
+            await estudianteBDD.save()
 
-          if (!redDoc.miembros.includes(estudianteBDD._id)) {
-            redDoc.miembros.push(estudianteBDD._id)
-            redDoc.cantidadMiembros = redDoc.miembros.length
-            await redDoc.save()
+            const alreadyMember = redDoc.miembros && redDoc.miembros.some(m => (m && m.equals && m.equals(estudianteBDD._id)) || String(m) === String(estudianteBDD._id))
+            if (!alreadyMember) {
+              redDoc.miembros.push(estudianteBDD._id)
+              redDoc.cantidadMiembros = redDoc.miembros.length
+              await redDoc.save()
+            }
+          } catch (err) {
+            console.error('Error añadiendo estudiante a red global:', err)
           }
-        } catch (err) {
-          console.error('Error añadiendo estudiante a red global:', err)
+        } else {
+          return res.status(403).json({ msg: 'No perteneces a esta red comunitaria' })
         }
-      } else {
-        return res.status(403).json({ msg: "No perteneces a esta red comunitaria" })
       }
     }
 
@@ -541,7 +599,8 @@ const crearPublicacion = async (req, res) => {
       autorId: estudianteId,
       comunidadId: targetComunidadId,
       titulo,
-      contenido
+      contenido,
+      categoria: cat
     })
 
     await nuevaPublicacion.save()
@@ -718,37 +777,65 @@ const listarPublicacionesComunidades = async (req, res) => {
 
 const publicarArticulo = async (req, res) => {
   try {
-    const { titulo, descripcion, precio, comunidadId, imagen } = req.body
+    const { titulo, descripcion, precio, comunidadId, imagen, categoria } = req.body
     const estudianteId = req.user?._id
-
-    // `comunidadId` validado por validators en rutas (cuando aplica)
 
     const estudianteBDD = await Estudiante.findById(estudianteId)
     if (!estudianteBDD) {
       return res.status(404).json({ msg: "Estudiante no encontrado" })
     }
 
-    // Validaciones de título, descripción y precio realizadas por validators en rutas
-
-    if (!estudianteBDD.redComunitaria || estudianteBDD.redComunitaria.length === 0) {
-      return res.status(400).json({ msg: "Debes pertenecer a una red comunitaria para publicar un artículo" })
+    // If frontend sends a category, enforce it must be 'venta'
+    if (categoria) {
+      const cat = String(categoria).trim().toLowerCase()
+      if (cat !== 'venta') return res.status(400).json({ msg: 'Categoría inválida para artículos. Solo "venta" está permitida.' })
     }
 
-    if (!estudianteBDD.redComunitaria.some(r => r.equals(comunidadId))) {
-      return res.status(403).json({ msg: "No perteneces a esta red comunitaria" })
+    // Determine target comunidad: optional -> default to global
+    let targetComunidadId = comunidadId
+    let redGlobal = null
+    if (!targetComunidadId) {
+      redGlobal = await RedComunitaria.findOne({ esGlobal: true })
+      if (!redGlobal) return res.status(500).json({ msg: 'No hay red global configurada' })
+      targetComunidadId = redGlobal._id.toString()
     }
 
-    const redDoc = await RedComunitaria.findById(comunidadId)
+    const redDoc = await RedComunitaria.findById(targetComunidadId)
     if (!redDoc) return res.status(404).json({ msg: 'Red comunitaria no encontrada' })
     if (redDoc.deshabilitada) return res.status(403).json({ msg: 'No puedes publicar artículos en una red deshabilitada' })
 
+    const pertenece = estudianteBDD.redComunitaria && estudianteBDD.redComunitaria.some(r => r.equals(targetComunidadId))
+    const esGlobalTarget = Boolean(redDoc.esGlobal)
+
+    if (!pertenece) {
+      if (esGlobalTarget) {
+        try {
+          estudianteBDD.redComunitaria = estudianteBDD.redComunitaria || []
+          estudianteBDD.redComunitaria.push(redDoc._id)
+          await estudianteBDD.save()
+
+          const alreadyMember = redDoc.miembros && redDoc.miembros.some(m => (m && m.equals && m.equals(estudianteBDD._id)) || String(m) === String(estudianteBDD._id))
+          if (!alreadyMember) {
+            redDoc.miembros.push(estudianteBDD._id)
+            redDoc.cantidadMiembros = redDoc.miembros.length
+            await redDoc.save()
+          }
+        } catch (err) {
+          console.error('Error añadiendo estudiante a red global:', err)
+        }
+      } else {
+        return res.status(403).json({ msg: "No perteneces a esta red comunitaria" })
+      }
+    }
+
     const nuevoArticulo = new Articulo({
       autorId: estudianteId,
-      redComunitaria: comunidadId,
+      redComunitaria: targetComunidadId,
       titulo,
       descripcion,
       precio,
-      imagen
+      imagen,
+      categoria: 'venta'
     })
 
     await nuevoArticulo.save()
@@ -886,48 +973,6 @@ const listarPublicacionesArticulos = async (req, res) => {
   }
 }
 
-const comprarArticulo = async (req, res) => {
-  const { paymentMethodId, articuloId, compradorEmail, compradorNombre } = req.body
-
-  try {
-    const articulo = await Articulo.findById(articuloId).populate("autorId")
-    if (!articulo) return res.status(404).json({ msg: "Artículo no encontrado" })
-    if (articulo.vendido) return res.status(400).json({ msg: "Este artículo ya fue vendido" })
-    if (!paymentMethodId) return res.status(400).json({ msg: "paymentMethodId no proporcionado" })
-
-    let [cliente] = (await stripe.customers.list({ email: compradorEmail, limit: 1 })).data || []
-    if (!cliente) {
-      cliente = await stripe.customers.create({ name: compradorNombre, email: compradorEmail })
-    }
-
-    const payment = await stripe.paymentIntents.create({
-      amount: Math.round(articulo.precio * 100),
-      currency: "USD",
-      description: `Compra del artículo: ${articulo.titulo}`,
-      payment_method: paymentMethodId,
-      confirm: true,
-      customer: cliente.id,
-      automatic_payment_methods: {
-        enabled: true,
-        allow_redirects: "never"
-      }
-    })
-
-    if (payment.status === "succeeded") {
-      articulo.vendido = true
-      await articulo.save()
-
-      return res.status(200).json({ msg: "Compra realizada exitosamente" })
-    } else {
-      return res.status(400).json({ msg: "El pago no fue completado" })
-    }
-
-  } catch (error) {
-    console.error("Error al procesar la compra:", error)
-    return res.status(500).json({ msg: "Error al intentar comprar el artículo", error })
-  }
-}
-
 const obtenerEstudiantes = async (req, res) => {
   try {
     const estudiantes = await Estudiante.find({ status: true, rol: 'Estudiante' })
@@ -971,7 +1016,8 @@ const obtenerPerfilRed = async (req, res) => {
         fotoPerfil: red.fotoPerfil,
         esOficial: red.esOficial,
         esVerificada: red.esVerificada,
-        creadaPor: red.creadaPor
+        creadaPor: red.creadaPor,
+        publicacionesCount: total
       },
       page: pageNumber,
       total,
@@ -1013,6 +1059,5 @@ export {
   actualizarArticulo,
   eliminarArticulo,
   listarPublicacionesArticulos,
-  comprarArticulo,
   obtenerEstudiantes
 }

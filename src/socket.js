@@ -4,6 +4,7 @@ import Estudiante from './models/Estudiantes.js'
 import Conversacion from './models/Conversaciones.js'
 import { saveMessage } from './services/mensajesService.js'
 import mongoose from 'mongoose'
+import socketEvents from './socketEvents.js'
 
 export const configurarSocket = (server) => {
   const io = new Server(server, {
@@ -15,6 +16,28 @@ export const configurarSocket = (server) => {
 
   // Map userId => Set(socketId)
   const usuariosConectados = new Map()
+
+  // Escuchar eventos emitidos por servicios (por ejemplo: mensajes leídos)
+  socketEvents.on('mensajes_leidos', async (payload) => {
+    try {
+      const { conversacionId, lectorId } = payload || {}
+      if (!conversacionId) return
+      const conversacion = await Conversacion.findById(conversacionId).lean()
+      if (!conversacion || !Array.isArray(conversacion.participantes)) return
+
+      for (const p of conversacion.participantes) {
+        const pid = String(p)
+        if (pid === String(lectorId)) continue // no notificar al lector
+        const sockets = usuariosConectados.get(pid)
+        if (!sockets) continue
+        for (const sid of sockets) {
+          io.to(sid).emit('mensajes_leidos', payload)
+        }
+      }
+    } catch (e) {
+      console.error('Error manejando socketEvents mensajes_leidos:', e)
+    }
+  })
 
   // Auth middleware for socket handshake using token in auth or headers
   io.use(async (socket, next) => {

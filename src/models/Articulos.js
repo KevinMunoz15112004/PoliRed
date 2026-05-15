@@ -5,6 +5,7 @@ const articuloSchema = new mongoose.Schema({
   descripcion: String,
   precio: Number,
   imagen: String,
+  categoria: { type: String, enum: ['venta'], default: 'venta' },
   autorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Estudiante' },
   redComunitaria: { type: mongoose.Schema.Types.ObjectId, ref: 'RedComunitaria' },
   vendido: { type: Boolean, default: false }

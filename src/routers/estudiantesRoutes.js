@@ -1,5 +1,5 @@
 import {Router} from 'express'
-import { registroEstudiante, confirmarMailEstudiante, comprobarTokenPasswordEstudiante, recuperarPasswordEstudiante, crearNuevoPasswordEstudiante, perfilEstudiante, actualizarUsername, completarPerfil, actualizarPerfilEstudiante, actualizarPasswordEstudiante, crearPublicacion, unirseARedComunitaria, salirseDeRedComunitaria, listarPublicaciones, listarRedesDelEstudiante, listarPublicacionesPorRed, listarPublicacionesGlobal, listarPublicacionesComunidades, obtenerRedesComunitarias, obtenerRedesExplorar, obtenerPerfilRed, publicarArticulo, listarArticulosPorRed, eliminarArticulo, actualizarArticulo, actualizarPublicacion, eliminarPublicacion, comprarArticulo, listarTodosArticulos, obtenerEstudiantes } 
+import { registroEstudiante, confirmarMailEstudiante, comprobarTokenPasswordEstudiante, recuperarPasswordEstudiante, crearNuevoPasswordEstudiante, perfilEstudiante, actualizarUsername, completarPerfil, actualizarPerfilEstudiante, actualizarPasswordEstudiante, crearPublicacion, unirseARedComunitaria, salirseDeRedComunitaria, listarPublicaciones, listarRedesDelEstudiante, listarPublicacionesPorRed, listarPublicacionesGlobal, listarPublicacionesComunidades, obtenerRedesComunitarias, obtenerRedesExplorar, obtenerPerfilRed, publicarArticulo, listarArticulosPorRed, eliminarArticulo, actualizarArticulo, actualizarPublicacion, eliminarPublicacion, listarTodosArticulos, obtenerEstudiantes } 
 from '../controllers/estudiantesController.js'
 import { requirePerfilCompleto, disallowPerfilCompleto } from '../middlewares/checkPerfilCompleto.js'
 import { verifyToken } from '../middlewares/auth.js'
@@ -32,7 +32,6 @@ router.get('/publicaciones/articulos/listar', verifyToken, listarTodosArticulos)
 router.get('/publicaciones/articulos/listar/:redId', verifyToken, validators.mongoIdParam('redId'), validateResult, listarArticulosPorRed)
 router.patch('/publicaciones/articulo/actualizar/:id', verifyToken, validators.mongoIdParam('id'), validateResult, actualizarArticulo)
 router.delete('/publicaciones/articulo/eliminar/:id', verifyToken, validators.mongoIdParam('id'), validateResult, eliminarArticulo)
-router.post('/articulo/comprar', verifyToken, comprarArticulo)
 
 //Rutas para la getsión de redes comunitarias
 router.get('/redes/listar', verifyToken, obtenerRedesComunitarias)
