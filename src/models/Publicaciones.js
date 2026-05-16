@@ -35,10 +35,9 @@ const publicacionSchema = new mongoose.Schema({
     enum: CATEGORIAS_PUBLICACION,
     required: true
   },
-  mediaUrl: {
-    type: String,
-    default: null,
-    trim: true
+  mediaUrls: {
+    type: [String],
+    default: []
   },
   // comentarios are stored in a separate `Comentario` collection; keep only the counter
   likes: [{

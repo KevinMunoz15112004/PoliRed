@@ -36,10 +36,12 @@ router.delete('/publicaciones/articulo/eliminar/:id', verifyToken, validators.mo
 //Rutas para la getsión de redes comunitarias
 router.get('/redes/listar', verifyToken, obtenerRedesComunitarias)
 
-// Obtener publicaciones solo de la red global
+// Obtener perfil de red
 router.get('/redes/:redId', verifyToken, validators.mongoIdParam('redId'), validateResult, obtenerPerfilRed)
-router.get('/publicaciones/global', listarPublicacionesGlobal)
-router.get('/publicaciones/comunitarias', listarPublicacionesComunidades)
+
+// Ver publicaciones de redes global y comunitarias
+router.get('/publicaciones/global', verifyToken, listarPublicacionesGlobal)
+router.get('/publicaciones/comunitarias', verifyToken, listarPublicacionesComunidades)
 
 router.get('/estudiantes/listar/redes', verifyToken, listarRedesDelEstudiante)
 router.post('/estudiantes/unirse/red', verifyToken, validators.mongoIdBody('redId'), validateResult, unirseARedComunitaria)

@@ -5,7 +5,10 @@ const articuloSchema = new mongoose.Schema({
   descripcion: String,
   tipoContenido: { type: String, enum: ['texto', 'imagen'], default: 'texto' },
   precio: { type: mongoose.Schema.Types.Mixed }, // number or string like 'Gratis'
-  imagen: String,
+  mediaUrls: {
+    type: [String],
+    default: []
+  },
   categoria: { type: String, enum: ['venta', 'cursos'], default: 'venta' },
   autorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Estudiante' },
   redComunitaria: { type: mongoose.Schema.Types.ObjectId, ref: 'RedComunitaria' },
