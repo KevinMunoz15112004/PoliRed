@@ -43,7 +43,7 @@ const handleMedia = async ({ req, bodyField = 'mediaUrls', filesField = 'imagen'
     throw {
       type: 'VALIDATION',
       code: 'MISSING_IMAGES',
-      message: 'Debes enviar mediaUrl o subir al menos una imagen'
+      message: 'Debes enviar mediaUrls o subir al menos una imagen'
     }
   }
 
