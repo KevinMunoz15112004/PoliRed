@@ -4,6 +4,7 @@ import Estudiante from '../models/Estudiantes.js'
 import RedComunitaria from '../models/RedComunitaria.js'
 import cloudinary from 'cloudinary'
 import fs from "fs-extra"
+import profileService from '../services/profileService.js'
 import AdminRed from '../models/adminRedes.js'
 import { sendMailToRecoveryPassword, sendMailToRegister, enviarCorreoNuevoAdmin } from "../config/nodemailer.js"
 import { crearTokenJWT } from "../middlewares/authSuperAdmin.js"
@@ -160,36 +161,21 @@ const actualizarPerfil = async (req, res) => {
 const actualizarAvatar = async (req, res) => {
   const id = req.user._id;
 
-  if (!req.files || !req.files.imagen) {
-    return res.status(400).json({ msg: 'Debes subir una imagen' });
-  }
-
-  const file = req.files.imagen;
-
   const superAdminBDD = await SuperAdmin.findById(id);
   if (!superAdminBDD) {
     return res.status(404).json({ msg: 'Usuario no encontrado' });
   }
 
   try {
-    const resultado = await cloudinary.uploader.upload(file.tempFilePath, {
-      folder: 'avatares',
-      public_id: `${id}_avatar`,
-      overwrite: true,
-    });
-
-    await fs.unlink(file.tempFilePath)
-
-    superAdminBDD.avatar = resultado.secure_url
+    const url = await profileService.handleProfileImage({ req, bodyField: 'avatar', filesField: 'imagen', folder: 'avatares', publicIdPrefix: id, required: true })
+    superAdminBDD.avatar = url
     await superAdminBDD.save();
-
-    res.status(200).json({
-      msg: 'Avatar actualizado correctamente',
-      avatar: superAdminBDD.avatar,
-    });
-  } catch (error) {
-    console.error(error)
-    res.status(500).json({ msg: 'Error al subir imagen', error: error.message })
+    res.status(200).json({ msg: 'Avatar actualizado correctamente', avatar: superAdminBDD.avatar })
+  } catch (err) {
+    if (err && err.type === 'VALIDATION') return res.status(400).json({ msg: err.message, code: err.code })
+    if (err && err.type === 'UPLOAD_ERROR') return res.status(500).json({ msg: err.message, code: err.code })
+    console.error(err)
+    res.status(500).json({ msg: 'Error al subir imagen' })
   }
 }
 

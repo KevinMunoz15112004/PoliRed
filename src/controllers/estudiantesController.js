@@ -7,6 +7,7 @@ import SuperAdmin from '../models/SuperAdmin.js'
 import fs from 'fs-extra'
 import cloudinary from 'cloudinary'
 import mediaService from '../services/mediaService.js'
+import profileService from '../services/profileService.js'
 import Publicacion from "../models/Publicaciones.js"
 import RedComunitaria from '../models/RedComunitaria.js'
 import { getGlobalIds, getGlobalRedDoc, filterOutGlobalIds, populateExcludeGlobalMatch, getGlobalId } from '../helpers/globalRed.js'
@@ -265,21 +266,15 @@ const completarPerfil = async (req, res) => {
     estudiante.username = usernameTrim
     estudiante.fotoPerfil = fotoPerfil || estudiante.fotoPerfil || null
 
-    // If an image file was uploaded, upload to Cloudinary and override fotoPerfil
-    if (req.files && req.files.imagen) {
-      const file = req.files.imagen
-      try {
-        const resultado = await cloudinary.uploader.upload(file.tempFilePath, {
-          folder: 'avatar_estudiantes',
-          public_id: `${estudianteId}_avatar`,
-          overwrite: true
-        })
-        await fs.unlink(file.tempFilePath)
-        estudiante.fotoPerfil = resultado.secure_url
-      } catch (err) {
-        console.error('Error subiendo avatar a Cloudinary:', err)
-        return res.status(500).json({ msg: 'Error subiendo avatar' })
-      }
+    // If an image file or fotoPerfil provided in body, handle centrally
+    try {
+      const url = await profileService.handleProfileImage({ req, bodyField: 'fotoPerfil', filesField: 'imagen', folder: 'avatar_estudiantes', publicIdPrefix: estudianteId, required: false })
+      if (url) estudiante.fotoPerfil = url
+    } catch (err) {
+      if (err && err.type === 'VALIDATION') return res.status(400).json({ msg: err.message, code: err.code })
+      if (err && err.type === 'UPLOAD_ERROR') return res.status(500).json({ msg: err.message, code: err.code })
+      console.error('Error subiendo avatar a Cloudinary:', err)
+      return res.status(500).json({ msg: 'Error subiendo avatar' })
     }
     if (typeof biografia !== 'undefined' && biografia !== null) {
       const bioTrim = String(biografia).trim()
@@ -350,20 +345,14 @@ const actualizarPerfilEstudiante = async (req, res) => {
   }
 
   // If an image file was uploaded, upload to Cloudinary and override fotoPerfil
-  if (req.files && req.files.imagen) {
-    const file = req.files.imagen
-    try {
-      const resultado = await cloudinary.uploader.upload(file.tempFilePath, {
-        folder: 'avatar_estudiantes',
-        public_id: `${id}_avatar`,
-        overwrite: true
-      })
-      await fs.unlink(file.tempFilePath)
-      estudianteBDD.fotoPerfil = resultado.secure_url
-    } catch (err) {
-      console.error('Error subiendo avatar a Cloudinary:', err)
-      return res.status(500).json({ msg: 'Error subiendo avatar' })
-    }
+  try {
+    const url = await profileService.handleProfileImage({ req, bodyField: 'fotoPerfil', filesField: 'imagen', folder: 'avatar_estudiantes', publicIdPrefix: id, required: false })
+    if (url) estudianteBDD.fotoPerfil = url
+  } catch (err) {
+    if (err && err.type === 'VALIDATION') return res.status(400).json({ msg: err.message, code: err.code })
+    if (err && err.type === 'UPLOAD_ERROR') return res.status(500).json({ msg: err.message, code: err.code })
+    console.error('Error subiendo avatar a Cloudinary:', err)
+    return res.status(500).json({ msg: 'Error subiendo avatar' })
   }
 
   await estudianteBDD.save()
@@ -660,53 +649,6 @@ const crearPublicacion = async (req, res) => {
   } catch (error) {
     console.error("Error al crear publicación:", error)
     return res.status(500).json({ msg: "Error en el servidor" })
-  }
-}
-
-const actualizarPublicacion = async (req, res) => {
-  try {
-    const { id } = req.params
-    const estudianteId = req.user?._id
-    const { titulo, contenido } = req.body
-
-    // ID validado por los validators en rutas
-
-    const publicacion = await Publicacion.findById(id)
-    if (!publicacion) {
-      return res.status(404).json({ msg: 'Publicación no encontrada' })
-    }
-
-    if (!publicacion.autorId.equals(estudianteId)) {
-      return res.status(403).json({ msg: 'No tienes permiso para actualizar esta publicación' })
-    }
-
-    if (!titulo && !contenido) {
-      return res.status(400).json({ msg: 'Debes enviar al menos un campo para actualizar' })
-    }
-
-    if (titulo) publicacion.titulo = titulo
-    if (contenido) publicacion.contenido = contenido
-
-    // Handle media updates if provided (mediaUrls in body or uploaded files)
-    if ((req.body && req.body.mediaUrls) || (req.files && req.files.imagen)) {
-      if (publicacion.tipoContenido === 'texto') return res.status(400).json({ msg: 'No se permite media en publicaciones de tipo texto' })
-      try {
-        const newMedia = await mediaService.handleMedia({ req, bodyField: 'mediaUrls', filesField: 'imagen', folder: 'publicaciones', publicIdPrefix: estudianteId })
-        publicacion.mediaUrls = newMedia
-      } catch (err) {
-        if (err && err.type === 'VALIDATION') return res.status(400).json({ msg: err.message, code: err.code })
-        if (err && err.type === 'UPLOAD_ERROR') return res.status(500).json({ msg: err.message, code: err.code })
-        console.error('Error procesando imágenes:', err)
-        return res.status(500).json({ msg: 'Error procesando imágenes', code: 'UNKNOWN_ERROR' })
-      }
-    }
-
-    await publicacion.save()
-
-    return res.status(200).json({ msg: 'Publicación actualizada correctamente', publicacion })
-  } catch (error) {
-    console.error('Error al actualizar publicación:', error)
-    return res.status(500).json({ msg: 'Error en el servidor' })
   }
 }
 
@@ -1039,82 +981,6 @@ const listarArticulosPorRed = async (req, res) => {
   }
 }
 
-const actualizarArticulo = async (req, res) => {
-  try {
-    const { id } = req.params
-    const estudianteId = req.user?._id
-    const { titulo, descripcion, precio, tipoContenido } = req.body
-
-    // ID validado por los validators en rutas
-
-    const articulo = await Articulo.findById(id)
-    if (!articulo) {
-      return res.status(404).json({ msg: 'Artículo no encontrado' })
-    }
-
-    if (!articulo.autorId.equals(estudianteId)) {
-      return res.status(403).json({ msg: 'No tienes permiso para actualizar este artículo' });
-    }
-
-    // Longitud del título validada por los validators en rutas
-
-
-    // If attempting to change tipoContenido or media, validate accordingly
-    const tipoCambio = tipoContenido ? String(tipoContenido).trim().toLowerCase() : null
-    let finalMediaUrls = []
-
-    // Require at least one updatable field
-    if (!titulo && !descripcion && !precio && !finalMediaUrl && !tipoCambio) {
-      return res.status(400).json({ msg: 'Debes enviar al menos un campo para actualizar' });
-    }
-
-    // If tipoCambio provided, validate values
-    if (tipoCambio) {
-      if (!['texto', 'imagen'].includes(tipoCambio)) return res.status(400).json({ msg: 'tipoContenido inválido. Valores permitidos: texto, imagen' })
-      if (tipoCambio === 'texto') {
-        // texto: imagen/media not allowed
-        if ((req.body && req.body.mediaUrls) || (req.files && req.files.imagen)) return res.status(400).json({ msg: 'No se permite media en artículos de tipo texto' })
-        if (titulo && !String(titulo).trim()) return res.status(400).json({ msg: 'Título inválido' })
-        if (descripcion && !String(descripcion).trim()) return res.status(400).json({ msg: 'Descripción inválida' })
-      } else {
-        // imagen: descripcion required (either existing or provided)
-        if (!descripcion && !articulo.descripcion) return res.status(400).json({ msg: 'Descripción requerida para artículos con imagen' })
-        try {
-          finalMediaUrls = await mediaService.handleMedia({ req, bodyField: 'mediaUrls', filesField: 'imagen', folder: 'articulos', publicIdPrefix: estudianteId })
-        } catch (err) {
-          if (err && err.type === 'VALIDATION') return res.status(400).json({ msg: err.message, code: err.code })
-          if (err && err.type === 'UPLOAD_ERROR') return res.status(500).json({ msg: err.message, code: err.code })
-          console.error('Error procesando imágenes:', err)
-          return res.status(500).json({ msg: 'Error procesando imágenes', code: 'UNKNOWN_ERROR' })
-        }
-      }
-    } else {
-      // No tipoCambio: if media provided (body or files), accept and upload
-      if ((req.body && req.body.mediaUrls) || (req.files && req.files.imagen)) {
-        try {
-          finalMediaUrls = await mediaService.handleMedia({ req, bodyField: 'mediaUrls', filesField: 'imagen', folder: 'articulos', publicIdPrefix: estudianteId })
-        } catch (err) {
-          const msg = err && err.message ? err.message : 'Error procesando imágenes'
-          return res.status(msg.includes('No puedes subir') ? 400 : 500).json({ msg })
-        }
-      }
-    }
-
-    if (titulo) articulo.titulo = titulo
-    if (descripcion) articulo.descripcion = descripcion
-    if (precio) articulo.precio = precio
-    if (finalMediaUrls && finalMediaUrls.length) articulo.mediaUrls = finalMediaUrls
-    if (tipoCambio) articulo.tipoContenido = tipoCambio
-
-    await articulo.save()
-
-    return res.status(200).json({ msg: 'Artículo actualizado correctamente', articulo })
-  } catch (error) {
-    console.error('Error al actualizar artículo:', error)
-    return res.status(500).json({ msg: 'Error en el servidor' })
-  }
-}
-
 const eliminarArticulo = async (req, res) => {
   try {
     const { id } = req.params
@@ -1139,8 +1005,6 @@ const eliminarArticulo = async (req, res) => {
     return res.status(500).json({ msg: 'Error en el servidor' })
   }
 }
-
-
 
 const obtenerEstudiantes = async (req, res) => {
   try {
@@ -1218,11 +1082,9 @@ export {
   listarPublicacionesGlobal,
   listarPublicacionesComunidades,
   crearPublicacion,
-  actualizarPublicacion,
   eliminarPublicacion,
   publicarArticulo,
   listarArticulosPorRed,
-  actualizarArticulo,
   eliminarArticulo,
   listarArticulosGlobal,
   listarArticulosComunidades,

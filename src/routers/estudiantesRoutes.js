@@ -1,5 +1,5 @@
 import {Router} from 'express'
-import { registroEstudiante, confirmarMailEstudiante, comprobarTokenPasswordEstudiante, recuperarPasswordEstudiante, crearNuevoPasswordEstudiante, perfilEstudiante, actualizarUsername, completarPerfil, actualizarPerfilEstudiante, actualizarPasswordEstudiante, crearPublicacion, unirseARedComunitaria, salirseDeRedComunitaria, listarRedesDelEstudiante, listarPublicacionesPorRed, listarPublicacionesGlobal, listarPublicacionesComunidades, obtenerRedesComunitarias, obtenerPerfilRed, publicarArticulo, listarArticulosPorRed, listarArticulosGlobal, listarArticulosComunidades, eliminarArticulo, actualizarArticulo, actualizarPublicacion, eliminarPublicacion, obtenerEstudiantes } 
+import { registroEstudiante, confirmarMailEstudiante, comprobarTokenPasswordEstudiante, recuperarPasswordEstudiante, crearNuevoPasswordEstudiante, perfilEstudiante, actualizarUsername, completarPerfil, actualizarPerfilEstudiante, actualizarPasswordEstudiante, crearPublicacion, unirseARedComunitaria, salirseDeRedComunitaria, listarRedesDelEstudiante, listarPublicacionesPorRed, listarPublicacionesGlobal, listarPublicacionesComunidades, obtenerRedesComunitarias, obtenerPerfilRed, publicarArticulo, listarArticulosPorRed, listarArticulosGlobal, listarArticulosComunidades, eliminarArticulo, eliminarPublicacion, obtenerEstudiantes } 
 from '../controllers/estudiantesController.js'
 import { requirePerfilCompleto, disallowPerfilCompleto } from '../middlewares/checkPerfilCompleto.js'
 import { verifyToken } from '../middlewares/auth.js'
@@ -23,14 +23,12 @@ router.patch('/estudiante/actualizarpassword/:id', verifyToken, validators.mongo
 
 //Rutas para la gestión de publicaciones
 router.post('/estudiantes/publicaciones', verifyToken, requirePerfilCompleto, validators.mongoIdBody('comunidadId', { optional: true }), validateResult, crearPublicacion)
-router.patch('/publicaciones/actualizar/:id', verifyToken, validators.mongoIdParam('id'), validateResult, actualizarPublicacion)
 router.delete('/publicaciones/eliminar/:id', verifyToken, validators.mongoIdParam('id'), validateResult, eliminarPublicacion)
 router.get('/publicaciones/red/:redId', verifyToken, validators.mongoIdParam('redId'), validateResult, listarPublicacionesPorRed)
 router.post('/publicaciones/articulos', verifyToken, requirePerfilCompleto, validators.title('titulo'), validators.description('descripcion'), validators.mongoIdBody('comunidadId', { optional: true }), validateResult, publicarArticulo)
 router.get('/publicaciones/articulos/listar/:redId', verifyToken, validators.mongoIdParam('redId'), validateResult, listarArticulosPorRed)
 router.get('/publicaciones/articulos/global', verifyToken, listarArticulosGlobal)
 router.get('/publicaciones/articulos/comunitarias', verifyToken, listarArticulosComunidades)
-router.patch('/publicaciones/articulo/actualizar/:id', verifyToken, validators.mongoIdParam('id'), validateResult, actualizarArticulo)
 router.delete('/publicaciones/articulo/eliminar/:id', verifyToken, validators.mongoIdParam('id'), validateResult, eliminarArticulo)
 
 //Rutas para la getsión de redes comunitarias

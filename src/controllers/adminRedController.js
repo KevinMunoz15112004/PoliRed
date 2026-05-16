@@ -3,6 +3,7 @@ import Estudiante from '../models/Estudiantes.js'
 import { sendMailToRecoveryPassword } from '../config/nodemailer.js'
 import fs from 'fs-extra'
 import cloudinary from 'cloudinary'
+import profileService from '../services/profileService.js'
 import Publicacion from '../models/Publicaciones.js'
 import { Articulo } from '../models/Articulos.js'
 import mongoose from 'mongoose'
@@ -66,33 +67,22 @@ const actualizarPasswordAdminRed = async (req, res) => {
 const actualizarAvatarAdminRed = async (req, res) => {
   const id = req.user._id
 
-  if (!req.files || !req.files.imagen) {
-    return res.status(400).json({ msg: 'Debes subir una imagen' })
-  }
-
-  const file = req.files.imagen
-
   const estudianteBDD = await Estudiante.findById(id)
   if (!estudianteBDD) {
     return res.status(404).json({ msg: 'Usuario no encontrado' })
   }
 
   try {
-    const resultado = await cloudinary.uploader.upload(file.tempFilePath, {
-      folder: 'avatar_adminRed',
-      public_id: `${id}_avatar`,
-      overwrite: true,
-    })
-
-    await fs.unlink(file.tempFilePath)
-
-    estudianteBDD.avatar = resultado.secure_url
+    // require an image for this endpoint
+    const url = await profileService.handleProfileImage({ req, bodyField: 'avatar', filesField: 'imagen', folder: 'avatar_adminRed', publicIdPrefix: id, required: true })
+    estudianteBDD.avatar = url
     await estudianteBDD.save()
-
     res.status(200).json({ msg: 'Avatar actualizado correctamente', avatar: estudianteBDD.avatar })
-  } catch (error) {
-    console.error(error)
-    res.status(500).json({ msg: 'Error al subir imagen', error: error.message })
+  } catch (err) {
+    if (err && err.type === 'VALIDATION') return res.status(400).json({ msg: err.message, code: err.code })
+    if (err && err.type === 'UPLOAD_ERROR') return res.status(500).json({ msg: err.message, code: err.code })
+    console.error(err)
+    res.status(500).json({ msg: 'Error al subir imagen' })
   }
 }
 
@@ -269,8 +259,6 @@ const obtenerInfoRed = async (req, res) => {
   }
 }
 
-
-
 const verEstudiantesDeRed = async (req, res) => {
   try {
     if (!req.user.roles || !req.user.roles.includes('admin_red')) return res.status(403).json({ msg: 'Acceso no autorizado. Solo para administradores de red.' })
@@ -378,22 +366,18 @@ const actualizarRedComunitaria = async (req, res) => {
       seActualizo = true
     }
 
-    // Si se sube una imagen, subirla a Cloudinary y asignarla a fotoPerfil
-    if (req.files && req.files.imagen) {
-      const file = req.files.imagen
+    // Si se sube una imagen (archivo o URL), manejarla con profileService
+    if (req.files && req.files.imagen || req.body && req.body.fotoPerfil) {
       try {
-        const resultado = await cloudinary.uploader.upload(file.tempFilePath, {
-          folder: 'foto_red_comunitaria',
-          public_id: `${red._id}_foto`,
-          overwrite: true,
-        })
-
-        await fs.unlink(file.tempFilePath)
-
-        red.fotoPerfil = resultado.secure_url
-        seActualizo = true
-      } catch (error) {
-        console.error('Error al subir imagen de la red:', error)
+        const url = await profileService.handleProfileImage({ req, bodyField: 'fotoPerfil', filesField: 'imagen', folder: 'foto_red_comunitaria', publicIdPrefix: red._id, required: false })
+        if (url) {
+          red.fotoPerfil = url
+          seActualizo = true
+        }
+      } catch (err) {
+        if (err && err.type === 'VALIDATION') return res.status(400).json({ msg: err.message, code: err.code })
+        if (err && err.type === 'UPLOAD_ERROR') return res.status(500).json({ msg: err.message, code: err.code })
+        console.error('Error al subir imagen de la red:', err)
         return res.status(500).json({ msg: 'Error al subir la imagen' })
       }
     }

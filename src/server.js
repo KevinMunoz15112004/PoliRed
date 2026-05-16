@@ -7,7 +7,6 @@ import estudiantesRoutes from './routers/estudiantesRoutes.js'
 import authRoutes from './routers/authRoutes.js'
 import cloudinary from 'cloudinary'
 import fileUpload from "express-fileupload"
-import chatRoutes from './routers/chatRoutes.js'
 import mensajesRoutes from './routers/mensajesRoutes.js'
 import { configurarSocket } from './socket.js'
 import http from 'http';
@@ -55,9 +54,6 @@ app.use('/api', estudiantesRoutes)
 
 // Rutas complementarias de funcionalidades sociales
 app.use('/api', socialRoutes)
-
-// Ruta para el chatbot
-app.use('/api', chatRoutes)
 
 // Ruta para obtener los mensajes
 app.use('/api', mensajesRoutes)
