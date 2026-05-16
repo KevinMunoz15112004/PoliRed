@@ -418,30 +418,6 @@ const obtenerRedesComunitarias = async (req, res) => {
   }
 }
 
-const obtenerRedesExplorar = async (req, res) => {
-  try {
-    // Solo redes marcadas como globales
-    const redes = await RedComunitaria.find({ esGlobal: true })
-      .select('nombre descripcion cantidadMiembros esOficial esVerificada fotoPerfil')
-      .lean()
-
-    const salida = redes.map(r => ({
-      id: r._id,
-      nombre: r.nombre,
-      descripcion: r.descripcion,
-      cantidadMiembros: r.cantidadMiembros,
-      esOficial: r.esOficial,
-      esVerificada: r.esVerificada,
-      fotoPerfil: r.fotoPerfil || null
-    }))
-
-    res.status(200).json(salida)
-  } catch (error) {
-    console.error('Error al obtener redes para explorar:', error)
-    res.status(500).json({ msg: 'Error del servidor' })
-  }
-}
-
 const unirseARedComunitaria = async (req, res) => {
   const estudianteId = req.user?._id
   const { redId } = req.body
@@ -1240,7 +1216,6 @@ export {
   actualizarPerfilEstudiante,
   actualizarPasswordEstudiante,
   obtenerRedesComunitarias,
-  obtenerRedesExplorar,
   obtenerPerfilRed,
   unirseARedComunitaria,
   listarRedesDelEstudiante,
