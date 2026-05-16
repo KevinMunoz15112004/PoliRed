@@ -382,10 +382,6 @@ const actualizarRedComunitaria = async (req, res) => {
       }
     }
 
-    if (!seActualizo) {
-      return res.status(400).json({ msg: 'Debe proporcionar al menos un campo válido para actualizar (descripción o imagen).' })
-    }
-
     await red.save()
 
     res.status(200).json({ msg: 'Red comunitaria actualizada exitosamente', red })

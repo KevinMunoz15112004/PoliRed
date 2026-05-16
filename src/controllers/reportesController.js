@@ -45,7 +45,6 @@ const crearReporteRed = async (req, res) => {
   try {
     const { tipo, descripcion, redId, archivos = [] } = req.body
 
-    if (!redId) return res.status(400).json({ msg: 'Falta redId' })
     const red = await RedComunitaria.findById(redId)
     if (!red) return res.status(404).json({ msg: 'Red comunitaria no encontrada' })
 
@@ -91,7 +90,6 @@ const crearReporteUsuario = async (req, res) => {
     const { tipo, descripcion, reportadoUsuarioId, archivos = [] } = req.body
 
     // verificar que el usuario reportado exista
-    if (!reportadoUsuarioId) return res.status(400).json({ msg: 'Falta reportadoUsuarioId' })
     const usuarioReportado = await Estudiante.findById(reportadoUsuarioId)
     if (!usuarioReportado) return res.status(404).json({ msg: 'Usuario reportado no encontrado' })
 

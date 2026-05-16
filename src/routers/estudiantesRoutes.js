@@ -22,10 +22,10 @@ router.patch('/estudiante/:id', verifyToken, validators.mongoIdParam('id'), vali
 router.patch('/estudiante/actualizarpassword/:id', verifyToken, validators.mongoIdParam('id'), validators.actualizarPasswordValidator, validateResult, actualizarPasswordEstudiante)
 
 //Rutas para la gestión de publicaciones
-router.post('/estudiantes/publicaciones', verifyToken, requirePerfilCompleto, validators.mongoIdBody('comunidadId', { optional: true }), validateResult, crearPublicacion)
+router.post('/estudiantes/publicaciones', verifyToken, requirePerfilCompleto, validators.crearPublicacionValidator, validateResult, crearPublicacion)
 router.delete('/publicaciones/eliminar/:id', verifyToken, validators.mongoIdParam('id'), validateResult, eliminarPublicacion)
 router.get('/publicaciones/red/:redId', verifyToken, validators.mongoIdParam('redId'), validateResult, listarPublicacionesPorRed)
-router.post('/publicaciones/articulos', verifyToken, requirePerfilCompleto, validators.title('titulo'), validators.description('descripcion'), validators.mongoIdBody('comunidadId', { optional: true }), validateResult, publicarArticulo)
+router.post('/publicaciones/articulos', verifyToken, requirePerfilCompleto, validators.publicarArticuloValidator, validateResult, publicarArticulo)
 router.get('/publicaciones/articulos/listar/:redId', verifyToken, validators.mongoIdParam('redId'), validateResult, listarArticulosPorRed)
 router.get('/publicaciones/articulos/global', verifyToken, listarArticulosGlobal)
 router.get('/publicaciones/articulos/comunitarias', verifyToken, listarArticulosComunidades)

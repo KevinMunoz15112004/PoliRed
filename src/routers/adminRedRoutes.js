@@ -23,7 +23,7 @@ router.delete('/publicaciones/admin/articulo/eliminar/:id', verifyToken, require
 
 //Rutas para la gestión de redes comunitarias
 router.get('/red/admin/informacion', verifyToken, requireRole('admin_red'), obtenerInfoRed)
-router.patch('/admin/actualizar/red', verifyToken, requireRole('admin_red'), actualizarRedComunitaria)
+router.patch('/admin/actualizar/red', verifyToken, requireRole('admin_red'), validators.actualizarRedComunitariaValidator, validateResult, actualizarRedComunitaria)
 router.get('/admin/estudiantes/listar', verifyToken, requireRole('admin_red'), verEstudiantesDeRed)
 router.delete('/admin/estudiantes/eliminar/:estudianteId', verifyToken, requireRole('admin_red'), validators.mongoIdParam('estudianteId'), validateResult, eliminarEstudianteDeRed)
 

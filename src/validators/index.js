@@ -3,6 +3,8 @@ import * as string from './stringValidators.js'
 import * as mongo from './mongoValidators.js'
 import * as auth from './authValidators.js'
 import * as report from './reportValidators.js'
+import * as content from './contentValidators.js'
+import * as red from './redValidators.js'
 
 export const validators = {
   // common
@@ -37,5 +39,12 @@ export const validators = {
   ,
   rehabilitarUsuarioValidator: report.rehabilitarUsuarioValidator
 }
+
+// content
+validators.crearPublicacionValidator = content.crearPublicacionValidator
+validators.publicarArticuloValidator = content.publicarArticuloValidator
+
+// red
+validators.actualizarRedComunitariaValidator = red.actualizarRedComunitariaValidator
 
 export default validators

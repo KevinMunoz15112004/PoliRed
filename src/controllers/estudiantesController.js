@@ -332,7 +332,6 @@ const actualizarPerfilEstudiante = async (req, res) => {
   if (apellido) estudianteBDD.apellido = apellido
   if (typeof biografia !== 'undefined') {
     const bioTrim = biografia === null ? null : String(biografia).trim()
-    if (bioTrim && bioTrim.length > 150) return res.status(400).json({ msg: 'La biografía no puede exceder 150 caracteres' })
     estudianteBDD.biografia = bioTrim
   }
   if (redComunitaria) {
@@ -422,10 +421,6 @@ const unirseARedComunitaria = async (req, res) => {
   const estudianteId = req.user?._id
   const { redId } = req.body
 
-  if (!redId) {
-    return res.status(400).json({ msg: 'Debes enviar el id de la red comunitaria' })
-  }
-
   try {
     const red = await RedComunitaria.findById(redId)
     if (!red) {
@@ -489,7 +484,7 @@ const salirseDeRedComunitaria = async (req, res) => {
   const estudianteId = req.user?._id
   const { redId } = req.body
 
-  if (!redId) return res.status(400).json({ msg: 'Debes enviar el id de la red comunitaria' })
+  
 
   try {
     const red = await RedComunitaria.findById(redId)
@@ -535,16 +530,9 @@ const salirseDeRedComunitaria = async (req, res) => {
 const crearPublicacion = async (req, res) => {
   try {
     const { titulo, contenido, comunidadId, categoria, tipoContenido } = req.body
-    // Ensure categoria provided
-    if (!categoria) return res.status(400).json({ msg: 'Campo categoría obligatorio' })
     const estudianteId = req.user?._id
-
-    // Validar categoría (internamente lowercase)
+    // categoria validated by validators in routes; normalize for internal use
     const cat = String(categoria).trim().toLowerCase()
-    const allowed = ['comunidad', 'noticias']
-    if (!allowed.includes(cat)) {
-      return res.status(400).json({ msg: `Categoría inválida. Valores permitidos: ${allowed.join(', ')}` })
-    }
 
     let targetComunidadId = comunidadId
     let redGlobal = null
@@ -568,21 +556,12 @@ const crearPublicacion = async (req, res) => {
       return res.status(404).json({ msg: "Estudiante no encontrado" })
     }
 
-    // Validate tipoContenido and required fields per tipo
+    // tipoContenido validated by validators in routes; normalize for internal use
     const tipo = tipoContenido ? String(tipoContenido).trim().toLowerCase() : 'texto'
-    if (!['texto', 'imagen'].includes(tipo)) return res.status(400).json({ msg: 'tipoContenido inválido. Valores permitidos: texto, imagen' })
-
-    // For texto: require titulo and contenido; mediaUrl not allowed
-    if (tipo === 'texto') {
-      if (!titulo || !String(titulo).trim()) return res.status(400).json({ msg: 'Título requerido para publicaciones de texto' })
-      if (!contenido || !String(contenido).trim()) return res.status(400).json({ msg: 'Contenido requerido para publicaciones de texto' })
-      if ((req.body && req.body.mediaUrls) || (req.files && req.files.imagen)) return res.status(400).json({ msg: 'No se permite media en publicaciones de tipo texto' })
-    }
 
     // For imagen: accept up to 3 images via `mediaUrls` (body) or uploaded files `imagen`
     let finalMediaUrls = []
     if (tipo === 'imagen') {
-      if (!contenido || !String(contenido).trim()) return res.status(400).json({ msg: 'Contenido requerido para publicaciones con imagen' })
       try {
         finalMediaUrls = await mediaService.handleMedia({ req, bodyField: 'mediaUrls', filesField: 'imagen', folder: 'publicaciones', publicIdPrefix: estudianteId })
       } catch (err) {
@@ -776,32 +755,15 @@ const publicarArticulo = async (req, res) => {
       return res.status(404).json({ msg: "Estudiante no encontrado" })
     }
 
-    // Categoria es obligatoria para artículos
-    if (!categoria) return res.status(400).json({ msg: 'Campo categoría obligatorio' })
+    // categoria and precio validated by validators in routes; normalize category
     const cat = String(categoria).trim().toLowerCase()
-    const allowedArtCats = ['venta', 'cursos']
-    if (!allowedArtCats.includes(cat)) return res.status(400).json({ msg: `Categoría inválida para artículos. Valores permitidos: ${allowedArtCats.join(', ')}` })
 
-    // precio is required and can be a non-negative number or the string 'Gratis'
-    if (typeof precio === 'undefined' || precio === null) {
-      return res.status(400).json({ msg: 'Campo precio obligatorio' })
-    }
-
+    // Normalize precio for storage: 'Gratis' or numeric
     let precioGuardado
-    if (typeof precio === 'string') {
-      if (precio.trim().toLowerCase() === 'gratis') {
-        precioGuardado = 'Gratis'
-      } else {
-        // try parse as number
-        const parsed = Number(precio)
-        if (Number.isNaN(parsed) || parsed < 0) return res.status(400).json({ msg: 'Precio inválido' })
-        precioGuardado = parsed
-      }
-    } else if (typeof precio === 'number') {
-      if (!isFinite(precio) || precio < 0) return res.status(400).json({ msg: 'Precio inválido' })
-      precioGuardado = precio
+    if (typeof precio === 'string' && precio.trim().toLowerCase() === 'gratis') {
+      precioGuardado = 'Gratis'
     } else {
-      return res.status(400).json({ msg: 'Precio inválido' })
+      precioGuardado = Number(precio)
     }
 
     // Determine target comunidad: optional -> default to global
@@ -841,18 +803,12 @@ const publicarArticulo = async (req, res) => {
       }
     }
 
-    // Validate tipoContenido for articulo
+    // tipoContenido validated by validators in routes; normalize
     const tipo = tipoContenido ? String(tipoContenido).trim().toLowerCase() : 'texto'
-    if (!['texto', 'imagen'].includes(tipo)) return res.status(400).json({ msg: 'tipoContenido inválido. Valores permitidos: texto, imagen' })
 
     // Normalize and upload media (body field `mediaUrls` or files field `imagen`)
     let finalMediaUrls = []
-    if (tipo === 'texto') {
-      if (!titulo || !String(titulo).trim()) return res.status(400).json({ msg: 'Título requerido para articulos de texto' })
-      if (!descripcion || !String(descripcion).trim()) return res.status(400).json({ msg: 'Descripción requerida para articulos de texto' })
-      if ((req.body && req.body.mediaUrls) || (req.files && req.files.imagen)) return res.status(400).json({ msg: 'No se permite media en articulos de tipo texto' })
-    } else {
-      if (!descripcion || !String(descripcion).trim()) return res.status(400).json({ msg: 'Descripción requerida para articulos con imagen' })
+    if (tipo === 'imagen') {
       try {
         finalMediaUrls = await mediaService.handleMedia({ req, bodyField: 'mediaUrls', filesField: 'imagen', folder: 'articulos', publicIdPrefix: estudianteId })
       } catch (err) {
