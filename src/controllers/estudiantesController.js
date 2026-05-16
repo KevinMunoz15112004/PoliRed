@@ -4,6 +4,8 @@ import AdminRed from '../models/adminRedes.js'
 import { Articulo } from '../models/Articulos.js'
 import { sendMailToRegister, sendMailToRecoveryPasswordE } from '../config/nodemailer.js'
 import SuperAdmin from '../models/SuperAdmin.js'
+import fs from 'fs-extra'
+import cloudinary from 'cloudinary'
 import Publicacion from "../models/Publicaciones.js"
 import RedComunitaria from '../models/RedComunitaria.js'
 // Stripe payment logic removed per request
@@ -253,6 +255,23 @@ const completarPerfil = async (req, res) => {
 
     estudiante.username = usernameTrim
     estudiante.fotoPerfil = fotoPerfil || estudiante.fotoPerfil || null
+
+    // If an image file was uploaded, upload to Cloudinary and override fotoPerfil
+    if (req.files && req.files.imagen) {
+      const file = req.files.imagen
+      try {
+        const resultado = await cloudinary.uploader.upload(file.tempFilePath, {
+          folder: 'avatar_estudiantes',
+          public_id: `${estudianteId}_avatar`,
+          overwrite: true
+        })
+        await fs.unlink(file.tempFilePath)
+        estudiante.fotoPerfil = resultado.secure_url
+      } catch (err) {
+        console.error('Error subiendo avatar a Cloudinary:', err)
+        return res.status(500).json({ msg: 'Error subiendo avatar' })
+      }
+    }
     if (typeof biografia !== 'undefined' && biografia !== null) {
       const bioTrim = String(biografia).trim()
       if (bioTrim.length > 150) return res.status(400).json({ msg: 'La biografía no puede exceder 150 caracteres' })
@@ -320,6 +339,23 @@ const actualizarPerfilEstudiante = async (req, res) => {
     const solicitado = Array.isArray(redComunitaria) ? redComunitaria.map(String) : [String(redComunitaria)]
     const combinado = Array.from(new Set([...solicitado, ...redesGlobalIds]))
     estudianteBDD.redComunitaria = combinado
+  }
+
+  // If an image file was uploaded, upload to Cloudinary and override fotoPerfil
+  if (req.files && req.files.imagen) {
+    const file = req.files.imagen
+    try {
+      const resultado = await cloudinary.uploader.upload(file.tempFilePath, {
+        folder: 'avatar_estudiantes',
+        public_id: `${id}_avatar`,
+        overwrite: true
+      })
+      await fs.unlink(file.tempFilePath)
+      estudianteBDD.fotoPerfil = resultado.secure_url
+    } catch (err) {
+      console.error('Error subiendo avatar a Cloudinary:', err)
+      return res.status(500).json({ msg: 'Error subiendo avatar' })
+    }
   }
 
   await estudianteBDD.save()
@@ -522,14 +558,14 @@ const salirseDeRedComunitaria = async (req, res) => {
 
 const crearPublicacion = async (req, res) => {
   try {
-    const { titulo, contenido, comunidadId, categoria } = req.body
+    const { titulo, contenido, comunidadId, categoria, tipoContenido, mediaUrl } = req.body
     // Ensure categoria provided
     if (!categoria) return res.status(400).json({ msg: 'Campo categoría obligatorio' })
     const estudianteId = req.user?._id
 
     // Validar categoría (internamente lowercase)
     const cat = String(categoria).trim().toLowerCase()
-    const allowed = ['comunidad', 'noticias', 'cursos']
+    const allowed = ['comunidad', 'noticias']
     if (!allowed.includes(cat)) {
       return res.status(400).json({ msg: `Categoría inválida. Valores permitidos: ${allowed.join(', ')}` })
     }
@@ -543,7 +579,7 @@ const crearPublicacion = async (req, res) => {
       if (!targetComunidadId) return res.status(400).json({ msg: 'La categoría "Comunidad" requiere el id de una red comunitaria' })
       // comunidadId format validated by validators in routes
     } else {
-      // noticias/cursos: comunidadId optional -> default to global
+      // noticias: comunidadId optional -> default to global
       if (!targetComunidadId) {
         redGlobal = await RedComunitaria.findOne({ esGlobal: true })
         if (!redGlobal) return res.status(500).json({ msg: 'No hay red global configurada' })
@@ -556,7 +592,38 @@ const crearPublicacion = async (req, res) => {
       return res.status(404).json({ msg: "Estudiante no encontrado" })
     }
 
-    // `titulo` y `contenido` y longitud del título son validados por los validators en rutas
+    // Validate tipoContenido and required fields per tipo
+    const tipo = tipoContenido ? String(tipoContenido).trim().toLowerCase() : 'texto'
+    if (!['texto', 'imagen'].includes(tipo)) return res.status(400).json({ msg: 'tipoContenido inválido. Valores permitidos: texto, imagen' })
+
+    // For texto: require titulo and contenido; mediaUrl not allowed
+    if (tipo === 'texto') {
+      if (!titulo || !String(titulo).trim()) return res.status(400).json({ msg: 'Título requerido para publicaciones de texto' })
+      if (!contenido || !String(contenido).trim()) return res.status(400).json({ msg: 'Contenido requerido para publicaciones de texto' })
+      if (mediaUrl || (req.files && req.files.imagen)) return res.status(400).json({ msg: 'No se permite media en publicaciones de tipo texto' })
+    }
+
+    // For imagen: require mediaUrl (or file) and require contenido; titulo optional
+    let finalMediaUrl = mediaUrl || null
+    if (tipo === 'imagen') {
+      if (!contenido || !String(contenido).trim()) return res.status(400).json({ msg: 'Contenido requerido para publicaciones con imagen' })
+      if (!finalMediaUrl) {
+        if (!req.files || !req.files.imagen) return res.status(400).json({ msg: 'Debes enviar mediaUrl o subir una imagen' })
+        const file = req.files.imagen
+        try {
+          const resultado = await cloudinary.uploader.upload(file.tempFilePath, {
+            folder: 'publicaciones',
+            public_id: `${estudianteId}_${Date.now()}`,
+            overwrite: true
+          })
+          await fs.unlink(file.tempFilePath)
+          finalMediaUrl = resultado.secure_url
+        } catch (err) {
+          console.error('Error subiendo imagen a Cloudinary:', err)
+          return res.status(500).json({ msg: 'Error subiendo imagen' })
+        }
+      }
+    }
 
     // Obtener doc de la red objetivo para determinar si es global
     const redDoc = await RedComunitaria.findById(targetComunidadId)
@@ -598,9 +665,11 @@ const crearPublicacion = async (req, res) => {
     const nuevaPublicacion = new Publicacion({
       autorId: estudianteId,
       comunidadId: targetComunidadId,
-      titulo,
-      contenido,
-      categoria: cat
+      titulo: titulo ? String(titulo).trim() : null,
+      contenido: contenido ? String(contenido).trim() : '',
+      tipoContenido: tipo,
+      categoria: cat,
+      mediaUrl: finalMediaUrl || null
     })
 
     await nuevaPublicacion.save()
@@ -673,19 +742,6 @@ const eliminarPublicacion = async (req, res) => {
   }
 }
 
-const listarPublicaciones = async (req, res) => {
-  try {
-    const publicaciones = await Publicacion.find()
-      .populate('autorId', 'nombre apellido')
-      .populate('comunidadId', 'nombre')
-      .sort({ createdAt: -1 })
-
-    res.status(200).json(publicaciones)
-  } catch (error) {
-    console.error('Error al listar publicaciones:', error)
-    res.status(500).json({ msg: 'Error en el servidor' })
-  }
-}
 
 const listarPublicacionesPorRed = async (req, res) => {
   try {
@@ -699,7 +755,7 @@ const listarPublicacionesPorRed = async (req, res) => {
     }
 
     const publicaciones = await Publicacion.find({ comunidadId: redId })
-      .populate('autorId', 'nombre apellido')
+      .populate('autorId', 'nombre apellido fotoPerfil')
       .populate('comunidadId', 'nombre')
       .sort({ timestamp: -1 });
 
@@ -728,7 +784,7 @@ const listarPublicacionesGlobal = async (req, res) => {
 
     const [items, total] = await Promise.all([
       Publicacion.find({ comunidadId: redGlobal._id })
-        .populate('autorId', 'nombre apellido username')
+        .populate('autorId', 'nombre apellido username fotoPerfil')
         .populate('comunidadId', 'nombre')
         .sort({ timestamp: -1, createdAt: -1 })
         .skip(skip)
@@ -760,7 +816,7 @@ const listarPublicacionesComunidades = async (req, res) => {
 
     const [items, total] = await Promise.all([
       Publicacion.find({ comunidadId: { $in: comunidadIds } })
-        .populate('autorId', 'nombre apellido username')
+        .populate('autorId', 'nombre apellido username fotoPerfil')
         .populate('comunidadId', 'nombre')
         .sort({ timestamp: -1, createdAt: -1 })
         .skip(skip)
@@ -777,7 +833,7 @@ const listarPublicacionesComunidades = async (req, res) => {
 
 const publicarArticulo = async (req, res) => {
   try {
-    const { titulo, descripcion, precio, comunidadId, imagen, categoria } = req.body
+    const { titulo, descripcion, precio, comunidadId, imagen, categoria, tipoContenido, mediaUrl } = req.body
     const estudianteId = req.user?._id
 
     const estudianteBDD = await Estudiante.findById(estudianteId)
@@ -785,10 +841,32 @@ const publicarArticulo = async (req, res) => {
       return res.status(404).json({ msg: "Estudiante no encontrado" })
     }
 
-    // If frontend sends a category, enforce it must be 'venta'
-    if (categoria) {
-      const cat = String(categoria).trim().toLowerCase()
-      if (cat !== 'venta') return res.status(400).json({ msg: 'Categoría inválida para artículos. Solo "venta" está permitida.' })
+    // Categoria es obligatoria para artículos
+    if (!categoria) return res.status(400).json({ msg: 'Campo categoría obligatorio' })
+    const cat = String(categoria).trim().toLowerCase()
+    const allowedArtCats = ['venta', 'cursos']
+    if (!allowedArtCats.includes(cat)) return res.status(400).json({ msg: `Categoría inválida para artículos. Valores permitidos: ${allowedArtCats.join(', ')}` })
+
+    // precio is required and can be a non-negative number or the string 'Gratis'
+    if (typeof precio === 'undefined' || precio === null) {
+      return res.status(400).json({ msg: 'Campo precio obligatorio' })
+    }
+
+    let precioGuardado
+    if (typeof precio === 'string') {
+      if (precio.trim().toLowerCase() === 'gratis') {
+        precioGuardado = 'Gratis'
+      } else {
+        // try parse as number
+        const parsed = Number(precio)
+        if (Number.isNaN(parsed) || parsed < 0) return res.status(400).json({ msg: 'Precio inválido' })
+        precioGuardado = parsed
+      }
+    } else if (typeof precio === 'number') {
+      if (!isFinite(precio) || precio < 0) return res.status(400).json({ msg: 'Precio inválido' })
+      precioGuardado = precio
+    } else {
+      return res.status(400).json({ msg: 'Precio inválido' })
     }
 
     // Determine target comunidad: optional -> default to global
@@ -828,14 +906,49 @@ const publicarArticulo = async (req, res) => {
       }
     }
 
+    // Validate tipoContenido for articulo
+    const tipo = tipoContenido ? String(tipoContenido).trim().toLowerCase() : 'texto'
+    if (!['texto', 'imagen'].includes(tipo)) return res.status(400).json({ msg: 'tipoContenido inválido. Valores permitidos: texto, imagen' })
+
+    let finalMediaUrl = mediaUrl || imagen || null
+    if (tipo === 'texto') {
+      if (!titulo || !String(titulo).trim()) return res.status(400).json({ msg: 'Título requerido para articulos de texto' })
+      if (!descripcion || !String(descripcion).trim()) return res.status(400).json({ msg: 'Descripción requerida para articulos de texto' })
+      if (finalMediaUrl || (req.files && req.files.imagen)) return res.status(400).json({ msg: 'No se permite media en articulos de tipo texto' })
+    } else {
+      // imagen: require descripcion and media or file
+      if (!descripcion || !String(descripcion).trim()) return res.status(400).json({ msg: 'Descripción requerida para articulos con imagen' })
+      if (!finalMediaUrl) {
+        if (!req.files || !req.files.imagen) return res.status(400).json({ msg: 'Debes enviar mediaUrl o subir una imagen' })
+        const file = req.files.imagen
+        try {
+          const resultado = await cloudinary.uploader.upload(file.tempFilePath, {
+            folder: 'articulos',
+            public_id: `${estudianteId}_${Date.now()}`,
+            overwrite: true
+          })
+          await fs.unlink(file.tempFilePath)
+          finalMediaUrl = resultado.secure_url
+        } catch (err) {
+          console.error('Error subiendo imagen a Cloudinary (articulo):', err)
+          return res.status(500).json({ msg: 'Error subiendo imagen' })
+        }
+      }
+    }
+
+    // (validated above) tipoContenido and media handling already performed
+
+    const articuloCategoria = cat === 'cursos' ? 'cursos' : 'venta'
+
     const nuevoArticulo = new Articulo({
       autorId: estudianteId,
       redComunitaria: targetComunidadId,
-      titulo,
-      descripcion,
-      precio,
-      imagen,
-      categoria: 'venta'
+      titulo: titulo ? String(titulo).trim() : null,
+      descripcion: descripcion ? String(descripcion).trim() : '',
+      precio: precioGuardado,
+      imagen: finalMediaUrl || null,
+      categoria: articuloCategoria,
+      tipoContenido: tipo
     })
 
     await nuevoArticulo.save()
@@ -850,21 +963,65 @@ const publicarArticulo = async (req, res) => {
   }
 }
 
-const listarTodosArticulos = async (req, res) => {
-  try {
-    const articulos = await Articulo.find()
-      .populate('autorId', 'nombre apellido')
-      .populate('redComunitaria', 'nombre')
-      .sort({ createdAt: -1 })
 
-    return res.status(200).json({
-      msg: articulos.length > 0
-        ? 'Artículos encontrados'
-        : 'No hay artículos publicados aún',
-      articulos
-    })
+// Listar artículos que pertenecen a la red global
+const listarArticulosGlobal = async (req, res) => {
+  try {
+    const { page = 1, limit = 10 } = req.query
+
+    const redGlobal = await RedComunitaria.findOne({ esGlobal: true })
+    if (!redGlobal) return res.status(404).json({ msg: 'No hay red global configurada' })
+
+    const pageNumber = Math.max(parseInt(page, 10) || 1, 1)
+    const limitNumber = Math.min(Math.max(parseInt(limit, 10) || 10, 1), 50)
+    const skip = (pageNumber - 1) * limitNumber
+
+    const [items, total] = await Promise.all([
+      Articulo.find({ redComunitaria: redGlobal._id })
+        .populate('autorId', 'nombre apellido username fotoPerfil')
+        .populate('redComunitaria', 'nombre')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNumber),
+      Articulo.countDocuments({ redComunitaria: redGlobal._id })
+    ])
+
+    return res.status(200).json({ redId: redGlobal._id, page: pageNumber, total, items })
   } catch (error) {
-    console.error('Error al listar todos los artículos:', error)
+    console.error('Error al listar artículos globales:', error)
+    return res.status(500).json({ msg: 'Error en el servidor' })
+  }
+}
+
+// Listar artículos en redes comunitarias (no-global)
+const listarArticulosComunidades = async (req, res) => {
+  try {
+    const { page = 1, limit = 10 } = req.query
+
+    const comunidades = await RedComunitaria.find({ esGlobal: { $ne: true } }).select('_id')
+    const comunidadIds = comunidades.map(c => c._id)
+
+    const pageNumber = Math.max(parseInt(page, 10) || 1, 1)
+    const limitNumber = Math.min(Math.max(parseInt(limit, 10) || 10, 1), 50)
+    const skip = (pageNumber - 1) * limitNumber
+
+    if (comunidadIds.length === 0) {
+      return res.status(200).json({ page: pageNumber, total: 0, items: [] })
+    }
+
+    const [items, total] = await Promise.all([
+      Articulo.find({ redComunitaria: { $in: comunidadIds } })
+        .populate('autorId', 'nombre apellido username fotoPerfil')
+        .populate('redComunitaria', 'nombre')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNumber),
+      Articulo.countDocuments({ redComunitaria: { $in: comunidadIds } })
+    ])
+
+    return res.status(200).json({ page: pageNumber, total, items })
+  } catch (error) {
+    console.error('Error al listar artículos de comunidades:', error)
     return res.status(500).json({ msg: 'Error en el servidor' })
   }
 }
@@ -881,7 +1038,7 @@ const listarArticulosPorRed = async (req, res) => {
     }
 
     const articulos = await Articulo.find({ redComunitaria: redId })
-      .populate('autorId', 'nombre apellido')
+      .populate('autorId', 'nombre apellido fotoPerfil')
       .populate('redComunitaria', 'nombre')
       .sort({ timestamp: -1 })
 
@@ -901,7 +1058,7 @@ const actualizarArticulo = async (req, res) => {
   try {
     const { id } = req.params
     const estudianteId = req.user?._id
-    const { titulo, descripcion, precio, imagen } = req.body
+    const { titulo, descripcion, precio, imagen, tipoContenido, mediaUrl } = req.body
 
     // ID validado por los validators en rutas
 
@@ -916,14 +1073,68 @@ const actualizarArticulo = async (req, res) => {
 
     // Longitud del título validada por los validators en rutas
 
-    if (!titulo && !descripcion && !precio && !imagen) {
+
+    // If attempting to change tipoContenido or media, validate accordingly
+    const tipoCambio = tipoContenido ? String(tipoContenido).trim().toLowerCase() : null
+    let finalMediaUrl = mediaUrl || imagen || null
+
+    // Require at least one updatable field
+    if (!titulo && !descripcion && !precio && !finalMediaUrl && !tipoCambio) {
       return res.status(400).json({ msg: 'Debes enviar al menos un campo para actualizar' });
+    }
+
+    // If tipoCambio provided, validate values
+    if (tipoCambio) {
+      if (!['texto', 'imagen'].includes(tipoCambio)) return res.status(400).json({ msg: 'tipoContenido inválido. Valores permitidos: texto, imagen' })
+      if (tipoCambio === 'texto') {
+        // texto: imagen/media not allowed
+        if (finalMediaUrl || (req.files && req.files.imagen)) return res.status(400).json({ msg: 'No se permite media en artículos de tipo texto' })
+        if (titulo && !String(titulo).trim()) return res.status(400).json({ msg: 'Título inválido' })
+        if (descripcion && !String(descripcion).trim()) return res.status(400).json({ msg: 'Descripción inválida' })
+      } else {
+        // imagen: descripcion required (either existing or provided)
+        if (!descripcion && !articulo.descripcion) return res.status(400).json({ msg: 'Descripción requerida para artículos con imagen' })
+        if (!finalMediaUrl) {
+          if (!req.files || !req.files.imagen) return res.status(400).json({ msg: 'Debes enviar mediaUrl o subir una imagen' })
+          const file = req.files.imagen
+          try {
+            const resultado = await cloudinary.uploader.upload(file.tempFilePath, {
+              folder: 'articulos',
+              public_id: `${estudianteId}_${Date.now()}`,
+              overwrite: true
+            })
+            await fs.unlink(file.tempFilePath)
+            finalMediaUrl = resultado.secure_url
+          } catch (err) {
+            console.error('Error subiendo imagen a Cloudinary (actualizar articulo):', err)
+            return res.status(500).json({ msg: 'Error subiendo imagen' })
+          }
+        }
+      }
+    } else {
+      // No tipoCambio: if media file provided, accept and upload
+      if (!finalMediaUrl && req.files && req.files.imagen) {
+        const file = req.files.imagen
+        try {
+          const resultado = await cloudinary.uploader.upload(file.tempFilePath, {
+            folder: 'articulos',
+            public_id: `${estudianteId}_${Date.now()}`,
+            overwrite: true
+          })
+          await fs.unlink(file.tempFilePath)
+          finalMediaUrl = resultado.secure_url
+        } catch (err) {
+          console.error('Error subiendo imagen a Cloudinary (actualizar articulo):', err)
+          return res.status(500).json({ msg: 'Error subiendo imagen' })
+        }
+      }
     }
 
     if (titulo) articulo.titulo = titulo
     if (descripcion) articulo.descripcion = descripcion
     if (precio) articulo.precio = precio
-    if (imagen) articulo.imagen = imagen
+    if (finalMediaUrl) articulo.imagen = finalMediaUrl
+    if (tipoCambio) articulo.tipoContenido = tipoCambio
 
     await articulo.save()
 
@@ -959,19 +1170,7 @@ const eliminarArticulo = async (req, res) => {
   }
 }
 
-const listarPublicacionesArticulos = async (req, res) => {
-  try {
-    const articulos = await Articulo.find()
-      .populate('autorId', 'nombre apellido')
-      .populate('redComunitaria', 'nombre descripcion')
-      .sort({ createdAt: -1 })
 
-    res.status(200).json(articulos)
-  } catch (error) {
-    console.error('Error al listar publicaciones de artículos:', error)
-    res.status(500).json({ msg: 'Error en el servidor' })
-  }
-}
 
 const obtenerEstudiantes = async (req, res) => {
   try {
@@ -1052,12 +1251,11 @@ export {
   crearPublicacion,
   actualizarPublicacion,
   eliminarPublicacion,
-  listarPublicaciones,
   publicarArticulo,
   listarArticulosPorRed,
-  listarTodosArticulos,
   actualizarArticulo,
   eliminarArticulo,
-  listarPublicacionesArticulos,
+  listarArticulosGlobal,
+  listarArticulosComunidades,
   obtenerEstudiantes
 }

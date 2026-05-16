@@ -110,7 +110,7 @@ const listarPublicaciones = async (req, res) => {
     if (!redAsignada) return res.status(400).json({ msg: 'El administrador no tiene una red comunitaria asignada' })
 
     const publicaciones = await Publicacion.find({ comunidadId: redAsignada })
-      .populate('autorId', 'nombre apellido')
+      .populate('autorId', 'nombre apellido fotoPerfil')
       .populate('comunidadId', 'nombre')
       .sort({ timestamp: -1 })
 
@@ -174,7 +174,7 @@ const listarArticulosPorRedAdmin = async (req, res) => {
     if (!redAsignada) return res.status(400).json({ msg: 'El administrador no tiene una red comunitaria asignada' })
 
     const articulos = await Articulo.find({ redComunitaria: redAsignada })
-      .populate('autorId', 'nombre apellido email')
+      .populate('autorId', 'nombre apellido email fotoPerfil')
       .populate('redComunitaria', 'nombre')
       .sort({ createdAt: -1 })
 
@@ -235,10 +235,33 @@ const obtenerInfoRed = async (req, res) => {
     const activa = relaciones.find(r => r.estado === 'activo')
     if (!activa) return res.status(400).json({ msg: 'No tienes una red comunitaria asignada.' })
 
-    const red = await RedComunitaria.findById(activa.redId)
+    const red = await RedComunitaria.findById(activa.redId).lean()
     if (!red) return res.status(404).json({ msg: 'Red comunitaria no encontrada' })
 
-    return res.status(200).json({ msg: 'Red comunitaria asignada', red })
+    // Contadores importantes para mostrar al admin de red
+    const publicacionesCount = await Publicacion.countDocuments({ comunidadId: red._id })
+    const articulosCount = await Articulo.countDocuments({ redComunitaria: red._id })
+
+    // Asegurar que cantidadMiembros esté poblada o derivada
+    const cantidadMiembros = typeof red.cantidadMiembros === 'number' ? red.cantidadMiembros : (Array.isArray(red.miembros) ? red.miembros.length : 0)
+
+    const info = {
+      _id: red._id,
+      nombre: red.nombre,
+      descripcion: red.descripcion,
+      fotoPerfil: red.fotoPerfil || null,
+      esVerificada: red.esVerificada || false,
+      deshabilitada: red.deshabilitada || false,
+      esGlobal: red.esGlobal || false,
+      esOficial: red.esOficial || false,
+      cantidadMiembros,
+      publicacionesCount,
+      articulosCount,
+      creadaAt: red.createdAt,
+      actualizadaAt: red.updatedAt
+    }
+
+    return res.status(200).json({ msg: 'Red comunitaria asignada', red: info })
 
   } catch (error) {
     console.error(error);
@@ -319,7 +342,10 @@ const actualizarRedComunitaria = async (req, res) => {
       return res.status(403).json({ msg: 'Acceso no autorizado. Solo los administradores de red pueden realizar esta acción.' })
     }
 
-    const redId = req.user.redAsignada
+    // Determinar la red asignada a partir de relaciones admin (consistente con otros controladores)
+    const relaciones = req.adminRelations || []
+    const activa = relaciones.find(r => r.estado === 'activo')
+    const redId = activa ? activa.redId : null
     const { descripcion } = req.body
 
     if (!redId) {
@@ -334,7 +360,19 @@ const actualizarRedComunitaria = async (req, res) => {
 
     let seActualizo = false
 
-    // El nombre NO puede ser modificado por el Admin_Red. Solo SuperAdmin puede cambiarlo.
+    const { nombre } = req.body
+
+    // Permitir que el admin de red modifique el nombre de su propia red,
+    // pero validar unicidad (excluyendo la red actual)
+    if (nombre?.trim()) {
+      const nombreTrim = nombre.trim()
+      // Evitar colisiones por mayúsculas/minúsculas
+      const existente = await RedComunitaria.findOne({ nombre: { $regex: `^${nombreTrim}$`, $options: 'i' }, _id: { $ne: red._id } })
+      if (existente) return res.status(400).json({ msg: 'Ya existe una red comunitaria con ese nombre.' })
+      red.nombre = nombreTrim
+      seActualizo = true
+    }
+
     if (descripcion?.trim()) {
       red.descripcion = descripcion.trim()
       seActualizo = true

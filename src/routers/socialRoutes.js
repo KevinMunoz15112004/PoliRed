@@ -5,9 +5,6 @@ import validators from '../validators/index.js'
 import validateResult from '../validators/validateResult.js'
 import {
   solicitarCreacionRed,
-  unirseARedAprobada,
-  salirDeRedComunitaria,
-  crearPublicacionExtendida,
   darLikePublicacion,
   quitarLikePublicacion,
   crearComentarioPublicacion,
@@ -17,16 +14,12 @@ import {
   quitarGuardadoPublicacion,
   listarPublicacionesGuardadas,
   listarPublicacionesLiked,
-  // messaging endpoints moved to mensajesRoutes
   listarNotificaciones,
   marcarNotificacionLeida,
-  subirArchivoMultimedia,
-  marcarRedOficialAdmin,
   listarRedesPendientesAprobacion,
   resolverAprobacionRed,
   revocarAdminRed,
   asignarDuenoRed,
-  eliminarPublicacionSuperAdmin
 } from '../controllers/socialController.js'
 import { requirePerfilCompleto } from '../middlewares/checkPerfilCompleto.js'
 import { crearReportePublicacion, crearReporteApp, crearReporteUsuario, listarReportesAdminRed } from '../controllers/reportesController.js'
@@ -35,10 +28,7 @@ const router = Router()
 
 // Estudiantes
 router.post('/redes/solicitar-creacion', verifyToken, validators.title('nombre'), validators.description('descripcion'), validateResult, solicitarCreacionRed)
-router.post('/redes/unirse', verifyToken, validators.mongoIdBody('redId'), validateResult, unirseARedAprobada)
-router.post('/redes/salir', verifyToken, validators.mongoIdBody('redId'), validateResult, salirDeRedComunitaria)
 
-router.post('/publicaciones/extendida', verifyToken, requirePerfilCompleto, crearPublicacionExtendida)
 router.post('/publicaciones/:id/like', verifyToken, requirePerfilCompleto, validators.mongoIdParam('id'), validateResult, darLikePublicacion)
 router.delete('/publicaciones/:id/like', verifyToken, requirePerfilCompleto, validators.mongoIdParam('id'), validateResult, quitarLikePublicacion)
 
@@ -53,11 +43,6 @@ router.get('/usuarios/likes', verifyToken, listarPublicacionesLiked)
 
 router.get('/notificaciones', verifyToken, listarNotificaciones)
 router.patch('/notificaciones/:id/leida', verifyToken, validators.mongoIdParam('id'), validateResult, marcarNotificacionLeida)
-
-router.post('/multimedia/subir', verifyToken, requirePerfilCompleto, subirArchivoMultimedia)
-
-// Admin de red
-router.patch('/admin/redes/:redId/oficial', verifyToken, requireRole('admin_red'), validators.mongoIdParam('redId'), validateResult, marcarRedOficialAdmin)
 
 // Reportes: estudiantes crean (publicación), admin de red consulta los reportes de su red
 router.post('/reportes/publicacion', verifyToken, requirePerfilCompleto, validators.reportPublicacionValidator, validateResult, crearReportePublicacion)
@@ -74,6 +59,5 @@ router.get('/superadmin/redes/pendientes', autenticarToken, isSuperAdmin, listar
 router.patch('/superadmin/redes/:redId/aprobacion', autenticarToken, isSuperAdmin, validators.mongoIdParam('redId'), validateResult, resolverAprobacionRed)
 router.patch('/superadmin/redes/:redId/revocar-admin', autenticarToken, isSuperAdmin, validators.mongoIdParam('redId'), validators.mongoIdBody('usuarioId'), validateResult, revocarAdminRed)
 router.patch('/superadmin/redes/:redId/asignar-dueno', autenticarToken, isSuperAdmin, validators.mongoIdParam('redId'), validators.mongoIdBody('usuarioId'), validateResult, asignarDuenoRed)
-router.delete('/superadmin/publicaciones/:id', autenticarToken, isSuperAdmin, validators.mongoIdParam('id'), validateResult, eliminarPublicacionSuperAdmin)
 
 export default router

@@ -1,24 +1,9 @@
 import mongoose from "mongoose";
 
-const TIPOS_CONTENIDO = ['texto', 'imagen', 'video'];
+const TIPOS_CONTENIDO = ['texto', 'imagen'];
 // Normal publications categories (internal lowercase)
-const CATEGORIAS_PUBLICACION = ['comunidad', 'noticias', 'cursos'];
+const CATEGORIAS_PUBLICACION = ['comunidad', 'noticias'];
 
-const comentarioSchema = new mongoose.Schema({
-  autorId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Estudiante',
-    required: true
-  },
-  contenido: {
-    type: String,
-    required: true
-  },
-  timestamp: {
-    type: Date,
-    default: Date.now
-  }
-});
 
 const publicacionSchema = new mongoose.Schema({
   autorId: {
@@ -33,7 +18,8 @@ const publicacionSchema = new mongoose.Schema({
   },
   titulo: {
     type: String,
-    required: true
+    default: null,
+    trim: true
   },
   contenido: {
     type: String,
@@ -54,7 +40,7 @@ const publicacionSchema = new mongoose.Schema({
     default: null,
     trim: true
   },
-  comentarios: [comentarioSchema],
+  // comentarios are stored in a separate `Comentario` collection; keep only the counter
   likes: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Estudiante'
@@ -71,7 +57,7 @@ const publicacionSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   }
-});
+}, { timestamps: true });
 
 const Publicacion = mongoose.model("Publicacion", publicacionSchema);
 

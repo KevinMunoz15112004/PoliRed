@@ -1,11 +1,11 @@
 import {Router} from 'express'
-import { registroEstudiante, confirmarMailEstudiante, comprobarTokenPasswordEstudiante, recuperarPasswordEstudiante, crearNuevoPasswordEstudiante, perfilEstudiante, actualizarUsername, completarPerfil, actualizarPerfilEstudiante, actualizarPasswordEstudiante, crearPublicacion, unirseARedComunitaria, salirseDeRedComunitaria, listarPublicaciones, listarRedesDelEstudiante, listarPublicacionesPorRed, listarPublicacionesGlobal, listarPublicacionesComunidades, obtenerRedesComunitarias, obtenerRedesExplorar, obtenerPerfilRed, publicarArticulo, listarArticulosPorRed, eliminarArticulo, actualizarArticulo, actualizarPublicacion, eliminarPublicacion, listarTodosArticulos, obtenerEstudiantes } 
+import { registroEstudiante, confirmarMailEstudiante, comprobarTokenPasswordEstudiante, recuperarPasswordEstudiante, crearNuevoPasswordEstudiante, perfilEstudiante, actualizarUsername, completarPerfil, actualizarPerfilEstudiante, actualizarPasswordEstudiante, crearPublicacion, unirseARedComunitaria, salirseDeRedComunitaria, listarRedesDelEstudiante, listarPublicacionesPorRed, listarPublicacionesGlobal, listarPublicacionesComunidades, obtenerRedesComunitarias, obtenerRedesExplorar, obtenerPerfilRed, publicarArticulo, listarArticulosPorRed, listarArticulosGlobal, listarArticulosComunidades, eliminarArticulo, actualizarArticulo, actualizarPublicacion, eliminarPublicacion, obtenerEstudiantes } 
 from '../controllers/estudiantesController.js'
 import { requirePerfilCompleto, disallowPerfilCompleto } from '../middlewares/checkPerfilCompleto.js'
 import { verifyToken } from '../middlewares/auth.js'
 import validators from '../validators/index.js'
 import validateResult from '../validators/validateResult.js'
-import { crearSolicitudHabilitarUsuario, listarMisSolicitudesHabilitar, deleteMiSolicitudHabilitar, listarMisReportesPublicacion, deleteMiReportePublicacion, listarMisReportesApp, deleteMiReporteApp, listarMisReportesUsuario, deleteMiReporteUsuario } from '../controllers/reportesController.js'
+import { crearSolicitudHabilitarUsuario, listarMisSolicitudesHabilitar, deleteMiSolicitudHabilitar, listarMisReportesPublicacion, deleteMiReportePublicacion, listarMisReportesApp, deleteMiReporteApp, listarMisReportesUsuario, deleteMiReporteUsuario, crearReporteRed, listarMisReportesRed, deleteMiReporteRed } from '../controllers/reportesController.js'
 
 const router = Router()
 
@@ -22,14 +22,14 @@ router.patch('/estudiante/:id', verifyToken, validators.mongoIdParam('id'), vali
 router.patch('/estudiante/actualizarpassword/:id', verifyToken, validators.mongoIdParam('id'), validators.actualizarPasswordValidator, validateResult, actualizarPasswordEstudiante)
 
 //Rutas para la gestión de publicaciones
-router.post('/estudiantes/publicaciones', verifyToken, requirePerfilCompleto, validators.title('titulo'), validators.trimAndNotEmpty('contenido'), validators.mongoIdBody('comunidadId', { optional: true }), validateResult, crearPublicacion)
-router.get('/publicaciones/listar', verifyToken, listarPublicaciones)
+router.post('/estudiantes/publicaciones', verifyToken, requirePerfilCompleto, validators.mongoIdBody('comunidadId', { optional: true }), validateResult, crearPublicacion)
 router.patch('/publicaciones/actualizar/:id', verifyToken, validators.mongoIdParam('id'), validateResult, actualizarPublicacion)
 router.delete('/publicaciones/eliminar/:id', verifyToken, validators.mongoIdParam('id'), validateResult, eliminarPublicacion)
 router.get('/publicaciones/red/:redId', verifyToken, validators.mongoIdParam('redId'), validateResult, listarPublicacionesPorRed)
-router.post('/publicaciones/articulos', verifyToken, requirePerfilCompleto, validators.title('titulo'), validators.description('descripcion'), validators.number('precio'), validators.mongoIdBody('comunidadId', { optional: true }), validateResult, publicarArticulo)
-router.get('/publicaciones/articulos/listar', verifyToken, listarTodosArticulos)
+router.post('/publicaciones/articulos', verifyToken, requirePerfilCompleto, validators.title('titulo'), validators.description('descripcion'), validators.mongoIdBody('comunidadId', { optional: true }), validateResult, publicarArticulo)
 router.get('/publicaciones/articulos/listar/:redId', verifyToken, validators.mongoIdParam('redId'), validateResult, listarArticulosPorRed)
+router.get('/publicaciones/articulos/global', verifyToken, listarArticulosGlobal)
+router.get('/publicaciones/articulos/comunitarias', verifyToken, listarArticulosComunidades)
 router.patch('/publicaciones/articulo/actualizar/:id', verifyToken, validators.mongoIdParam('id'), validateResult, actualizarArticulo)
 router.delete('/publicaciones/articulo/eliminar/:id', verifyToken, validators.mongoIdParam('id'), validateResult, eliminarArticulo)
 
@@ -63,6 +63,11 @@ router.get('/estudiantes/reportes/app', verifyToken, listarMisReportesApp)
 router.delete('/estudiantes/reportes/app/:id', verifyToken, validators.mongoIdParam('id'), validateResult, deleteMiReporteApp)
 router.get('/estudiantes/reportes/usuario', verifyToken, listarMisReportesUsuario)
 router.delete('/estudiantes/reportes/usuario/:id', verifyToken, validators.mongoIdParam('id'), validateResult, deleteMiReporteUsuario)
+
+// Estudiante: reportes sobre redes
+router.post('/estudiantes/reportes/red', verifyToken, validators.mongoIdBody('redId'), validateResult, crearReporteRed)
+router.get('/estudiantes/reportes/red', verifyToken, listarMisReportesRed)
+router.delete('/estudiantes/reportes/red/:id', verifyToken, validators.mongoIdParam('id'), validateResult, deleteMiReporteRed)
 
 
 export default router

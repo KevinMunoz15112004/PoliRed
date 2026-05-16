@@ -37,97 +37,6 @@ const solicitarCreacionRed = async (req, res) => {
   }
 }
 
-const crearPublicacion = async (req, res) => {
-  try {
-    const { titulo, contenido, comunidadId, tipoContenido, categoria, mediaUrl } = req.body
-    const estudianteId = req.user?._id
-
-    // Categoria es obligatoria
-    if (!categoria) return res.status(400).json({ msg: 'Campo categoría obligatorio' })
-    const cat = String(categoria).trim().toLowerCase()
-    const allowed = ['comunidad', 'noticias', 'cursos']
-    if (!allowed.includes(cat)) return res.status(400).json({ msg: `Categoría inválida. Valores permitidos: ${allowed.join(', ')}` })
-
-    let targetComunidadId = comunidadId
-    if (cat === 'comunidad') {
-      if (!targetComunidadId) return res.status(400).json({ msg: 'La categoría "Comunidad" requiere el id de una red comunitaria' })
-    } else {
-      if (!targetComunidadId) {
-        const redGlobal = await RedComunitaria.findOne({ esGlobal: true })
-        if (!redGlobal) return res.status(500).json({ msg: 'No hay red global configurada' })
-        targetComunidadId = redGlobal._id
-      }
-    }
-
-    // Validaciones básicas
-    if (!titulo || !titulo.trim()) return res.status(400).json({ msg: 'Título requerido' })
-
-    if (comunidadId && !mongoose.Types.ObjectId.isValid(comunidadId)) {
-      return res.status(400).json({ msg: 'ID de comunidad no válido' })
-    }
-
-    if (comunidadId) {
-      const red = await RedComunitaria.findById(comunidadId)
-      if (!red) return res.status(404).json({ msg: 'Comunidad no encontrada' })
-      if (red.deshabilitada) return res.status(403).json({ msg: 'No puedes publicar en una red deshabilitada' })
-    }
-
-    const publicacion = await Publicacion.create({
-      titulo: titulo.trim(),
-      contenido: contenido ? contenido.trim() : '',
-      comunidadId: targetComunidadId || null,
-      tipoContenido: tipoContenido || 'texto',
-      categoria: cat,
-      mediaUrl: mediaUrl || null,
-      autorId: estudianteId
-    })
-
-    // Crear notificación para la comunidad o para seguidores, según la lógica
-    if (comunidadId) {
-      await crearNotificacion({
-        usuarioId: comunidadId,
-        emisorId: estudianteId,
-        tipo: 'nueva_publicacion_comunidad',
-        publicacionId: publicacion._id,
-        mensaje: 'Nueva publicación en la comunidad'
-      })
-    }
-
-    return res.status(201).json({ msg: 'Publicación creada', publicacion })
-  } catch (error) {
-    console.error('Error al crear publicación:', error)
-    return res.status(500).json({ msg: 'Error en el servidor' })
-  }
-}
-
-const crearPublicacionExtendida = async (req, res) => {
-  try {
-    const { id } = req.params
-    const estudianteId = req.user?._id
-
-    // ID validado por validators en rutas
-
-    const publicacion = await Publicacion.findById(id)
-    if (!publicacion) {
-      return res.status(404).json({ msg: 'Publicación no encontrada' })
-    }
-
-    // Popular autor, comunidad y likes
-    const publicacionPop = await Publicacion.findById(id)
-      .populate('autorId', 'nombre apellido')
-      .populate('comunidadId', 'nombre')
-      .populate('likes', 'nombre apellido')
-
-    // Obtener comentarios desde el modelo Comentario (con user info)
-    const comentarios = await Comentario.find({ postId: id }).populate('userId', 'nombre apellido').sort({ createdAt: 1 })
-
-    return res.status(200).json({ publicacion: publicacionPop, comentarios })
-  } catch (error) {
-    console.error('Error al crear publicación extendida:', error)
-    return res.status(500).json({ msg: 'Error en el servidor' })
-  }
-}
-
 const darLikePublicacion = async (req, res) => {
   try {
     const { id } = req.params
@@ -146,18 +55,16 @@ const darLikePublicacion = async (req, res) => {
       if (red && red.deshabilitada) return res.status(403).json({ msg: 'No puedes dar like en publicaciones de una red deshabilitada' })
     }
 
-    const yaTieneLike = publicacion.likes.some((likeId) => likeId.equals(estudianteId))
-      if (yaTieneLike) {
-        // devolver lista poblada de quienes dieron like
-        const pub = await Publicacion.findById(id).populate('likes', 'nombre apellido')
-        return res.status(200).json({ msg: 'La publicación ya tenía like', likes: pub.likes })
-      }
+    // Convertir a ObjectId para evitar problemas de tipo
+    const estudianteObjId = new mongoose.Types.ObjectId(estudianteId)
 
-      publicacion.likes.push(estudianteId)
-    // actualizar contador
-    publicacion.likesCount = publicacion.likes.length
-    await publicacion.save()
+    // Añadir e incrementar en una sola operación atómica sólo si el usuario no tiene like aún
+    const addRes = await Publicacion.updateOne(
+      { _id: id, likes: { $ne: estudianteObjId } },
+      { $addToSet: { likes: estudianteObjId }, $inc: { likesCount: 1 } }
+    )
 
+    if (addRes.modifiedCount && addRes.modifiedCount > 0) {
       await crearNotificacion({
         usuarioId: publicacion.autorId,
         emisorId: estudianteId,
@@ -167,7 +74,12 @@ const darLikePublicacion = async (req, res) => {
       })
 
       const pub = await Publicacion.findById(id).populate('likes', 'nombre apellido')
-      return res.status(200).json({ msg: 'Like agregado', likes: pub.likes })
+      return res.status(201).json({ msg: 'Like agregado', likes: pub.likes })
+    }
+
+    // No se modificó: el usuario ya tenía like
+    const pub = await Publicacion.findById(id).populate('likes', 'nombre apellido')
+    return res.status(409).json({ msg: 'Ya diste like a esta publicación', likes: pub.likes })
   } catch (error) {
     console.error('Error al dar like:', error)
     return res.status(500).json({ msg: 'Error en el servidor' })
@@ -186,13 +98,21 @@ const quitarLikePublicacion = async (req, res) => {
       return res.status(404).json({ msg: 'Publicación no encontrada' })
     }
 
-    publicacion.likes = publicacion.likes.filter((likeId) => !likeId.equals(estudianteId))
-    // actualizar contador
-    publicacion.likesCount = publicacion.likes.length
-    await publicacion.save()
+    const estudianteObjId = new mongoose.Types.ObjectId(estudianteId)
 
-    const pub = await Publicacion.findById(id).populate('likes', 'nombre apellido')
-    return res.status(200).json({ msg: 'Like removido', likes: pub.likes })
+    // Quitar y decrementar sólo si el usuario tenía like
+    const pullRes = await Publicacion.updateOne(
+      { _id: id, likes: estudianteObjId },
+      { $pull: { likes: estudianteObjId }, $inc: { likesCount: -1 } }
+    )
+
+    if (pullRes.modifiedCount && pullRes.modifiedCount > 0) {
+      const pub = await Publicacion.findById(id).populate('likes', 'nombre apellido')
+      return res.status(200).json({ msg: 'Like removido', likes: pub.likes })
+    }
+
+    // Si no se removió, el usuario no tenía like en esa publicación
+    return res.status(409).json({ msg: 'No tienes like en esta publicación' })
   } catch (error) {
     console.error('Error al quitar like:', error)
     return res.status(500).json({ msg: 'Error en el servidor' })
@@ -229,14 +149,8 @@ const crearComentarioPublicacion = async (req, res) => {
     // popular comentario con datos del usuario
     const comentarioPop = await Comentario.findById(comentario._id).populate('userId', 'nombre apellido')
 
-    publicacion.comentarios.push({
-      autorId: estudianteId,
-      contenido: contenido.trim(),
-      timestamp: new Date()
-    })
-    // actualizar contador de comentarios
-    publicacion.commentsCount = publicacion.comentarios.length
-    await publicacion.save()
+    // Incrementar commentsCount de forma atómica en la publicación
+    await Publicacion.updateOne({ _id: publicacion._id }, { $inc: { commentsCount: 1 } })
 
     await crearNotificacion({
       usuarioId: publicacion.autorId,
@@ -286,6 +200,11 @@ const responderComentario = async (req, res) => {
 
     comentarioPadre.hijos.push(respuesta._id)
     await comentarioPadre.save()
+
+    // Incrementar contador de comentarios en el post
+    if (comentarioPadre.postId) {
+      await Publicacion.updateOne({ _id: comentarioPadre.postId }, { $inc: { commentsCount: 1 } })
+    }
 
     await crearNotificacion({
       usuarioId: comentarioPadre.userId,
@@ -396,7 +315,7 @@ const listarPublicacionesGuardadas = async (req, res) => {
       .populate({
         path: 'publicacionesGuardadas',
         populate: [
-          { path: 'autorId', select: 'nombre apellido' },
+          { path: 'autorId', select: 'nombre apellido fotoPerfil' },
           { path: 'comunidadId', select: 'nombre' }
         ]
       })
@@ -418,7 +337,7 @@ const listarPublicacionesLiked = async (req, res) => {
 
     // Buscar publicaciones cuyo array `likes` contenga al estudiante
     const publicaciones = await Publicacion.find({ likes: estudianteId })
-      .populate('autorId', 'nombre apellido')
+      .populate('autorId', 'nombre apellido fotoPerfil')
       .populate('comunidadId', 'nombre')
       .sort({ createdAt: -1 })
 
@@ -428,23 +347,6 @@ const listarPublicacionesLiked = async (req, res) => {
     return res.status(500).json({ msg: 'Error en el servidor' })
   }
 }
-
-// Note: feed and per-red feed listing consolidated into `estudiantesController`.
-
-// --- Stubs for missing features (to be implemented) ---
-
-const unirseARedAprobada = async (req, res) => {
-  return res.status(501).json({ msg: 'Not implemented: unirseARedAprobada' })
-}
-
-const salirDeRedComunitaria = async (req, res) => {
-  return res.status(501).json({ msg: 'Not implemented: salirDeRedComunitaria' })
-}
-
-// Note: messaging endpoints are centralized in the `mensajes` module
-// (controllers, routes and socket). This controller no longer proxies
-// messaging functions to avoid duplication and keep a single source
-// of truth for private messaging logic.
 
 const listarNotificaciones = async (req, res) => {
   try {
@@ -470,14 +372,6 @@ const marcarNotificacionLeida = async (req, res) => {
     console.error('Error al marcar notificación:', error)
     return res.status(500).json({ msg: 'Error en el servidor' })
   }
-}
-
-const subirArchivoMultimedia = async (req, res) => {
-  return res.status(501).json({ msg: 'Not implemented: subirArchivoMultimedia' })
-}
-
-const marcarRedOficialAdmin = async (req, res) => {
-  return res.status(501).json({ msg: 'Not implemented: marcarRedOficialAdmin' })
 }
 
 const listarRedesPendientesAprobacion = async (req, res) => {
@@ -730,14 +624,8 @@ const asignarDuenoRed = async (req, res) => {
   }
 }
 
-const eliminarPublicacionSuperAdmin = async (req, res) => {
-  return res.status(501).json({ msg: 'Not implemented: eliminarPublicacionSuperAdmin' })
-}
-
 export {
   solicitarCreacionRed,
-  crearPublicacion,
-  crearPublicacionExtendida,
   darLikePublicacion,
   quitarLikePublicacion,
   crearComentarioPublicacion,
@@ -747,15 +635,10 @@ export {
   quitarGuardadoPublicacion,
   listarPublicacionesGuardadas,
   listarPublicacionesLiked,
-  unirseARedAprobada,
-  salirDeRedComunitaria,
   listarNotificaciones,
   marcarNotificacionLeida,
-  subirArchivoMultimedia,
-  marcarRedOficialAdmin,
   listarRedesPendientesAprobacion,
   resolverAprobacionRed,
   revocarAdminRed,
-  asignarDuenoRed,
-  eliminarPublicacionSuperAdmin
+  asignarDuenoRed
 }

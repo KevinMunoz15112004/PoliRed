@@ -3,6 +3,7 @@ import Publicacion from '../models/Publicaciones.js'
 import ReportePublicacion from '../models/ReportePublicacion.js'
 import ReporteUsuario from '../models/ReporteUsuario.js'
 import ReporteApp from '../models/ReporteApp.js'
+import ReporteRed from '../models/ReporteRed.js'
 import Estudiante from '../models/Estudiantes.js'
 import AdminRed from '../models/adminRedes.js'
 import SolicitudVerificacion from '../models/SolicitudVerificacion.js'
@@ -32,6 +33,31 @@ const crearReportePublicacion = async (req, res) => {
       .populate('redId', 'nombre')
       .select('-reporterId')
 
+    return res.status(201).json({ msg: 'Reporte creado', reporte: reportePop })
+  } catch (error) {
+    console.error(error)
+    return res.status(500).json({ msg: 'Error en el servidor' })
+  }
+}
+
+// Crear reporte hacia una red comunitaria (llega al SuperAdmin)
+const crearReporteRed = async (req, res) => {
+  try {
+    const { tipo, descripcion, redId, archivos = [] } = req.body
+
+    if (!redId) return res.status(400).json({ msg: 'Falta redId' })
+    const red = await RedComunitaria.findById(redId)
+    if (!red) return res.status(404).json({ msg: 'Red comunitaria no encontrada' })
+
+    const nuevoReporte = await ReporteRed.create({
+      tipo,
+      descripcion: descripcion ? descripcion.trim() : '',
+      reporterId: req.user ? req.user._id : null,
+      redId,
+      archivos
+    })
+
+    const reportePop = await ReporteRed.findById(nuevoReporte._id).populate('redId', 'nombre').select('-reporterId')
     return res.status(201).json({ msg: 'Reporte creado', reporte: reportePop })
   } catch (error) {
     console.error(error)
@@ -99,6 +125,17 @@ const listarReportesUsuarios = async (req, res) => {
   }
 }
 
+// SuperAdmin: listar reportes sobre redes comunitarias
+const listarReportesRedes = async (req, res) => {
+  try {
+    const reportes = await ReporteRed.find().populate('redId', 'nombre deshabilitada').select('-reporterId').sort({ createdAt: -1 })
+    return res.status(200).json({ reportes })
+  } catch (error) {
+    console.error(error)
+    return res.status(500).json({ msg: 'Error en el servidor' })
+  }
+}
+
 const listarReportesApp = async (req, res) => {
   try {
     const reportes = await ReporteApp.find().select('-reporterId').sort({ createdAt: -1 })
@@ -123,8 +160,8 @@ const resolverReporteUsuario = async (req, res) => {
     const reporte = await ReporteUsuario.findById(id)
     if (!reporte) return res.status(404).json({ msg: 'Reporte de usuario no encontrado' })
 
-    // Prevent re-processing a report that's already resolved
-    if (reporte.estado === 'resuelto') return res.status(400).json({ msg: 'El reporte ya fue resuelto' })
+    // Prevent re-processing a report that's already resolved or rejected
+    if (reporte.estado === 'resuelto' || reporte.estado === 'rechazado') return res.status(400).json({ msg: 'El reporte ya fue resuelto o rechazado' })
 
     if (estado === 'Rechazada') {
       // Mark report as rejected instead of deleting
@@ -148,6 +185,51 @@ const resolverReporteUsuario = async (req, res) => {
 
     const reportePop = await ReporteUsuario.findById(reporte._id).populate('reportadoUsuarioId', 'nombre apellido email').select('-reporterId')
     return res.status(200).json({ msg: 'Reporte resuelto. Usuario suspendido', reporte: reportePop })
+  } catch (error) {
+    console.error(error)
+    return res.status(500).json({ msg: 'Error en el servidor' })
+  }
+}
+
+// SuperAdmin: resolver reporte de red (deshabilitar la red si es aprobado)
+const resolverReporteRed = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { estado, respuesta } = req.body
+
+    if (!FINAL_STATES.includes(estado)) return res.status(400).json({ msg: 'Estado inválido. Solo se acepta "Resuelta" o "Rechazada"' })
+
+    const reporte = await ReporteRed.findById(id)
+    if (!reporte) return res.status(404).json({ msg: 'Reporte de red no encontrado' })
+
+    // Prevent re-processing
+    if (reporte.estado === 'resuelto' || reporte.estado === 'rechazado') return res.status(400).json({ msg: 'El reporte ya fue resuelto o rechazado' })
+
+    if (estado === 'Rechazada') {
+      reporte.estado = 'rechazado'
+      if (respuesta) reporte.respuesta = respuesta
+      await reporte.save()
+      const reportePop = await ReporteRed.findById(reporte._id).populate('redId', 'nombre deshabilitada').select('-reporterId')
+      return res.status(200).json({ msg: 'Reporte rechazado', reporte: reportePop })
+    }
+
+    // Resuelta: deshabilitar la red
+    reporte.estado = 'resuelto'
+    if (respuesta) reporte.respuesta = respuesta
+    await reporte.save()
+
+    const red = await RedComunitaria.findById(reporte.redId)
+    if (!red) {
+      const reportePop = await ReporteRed.findById(reporte._id).populate('redId', 'nombre deshabilitada').select('-reporterId')
+      return res.status(200).json({ msg: 'Reporte resuelto. La red no existe', reporte: reportePop })
+    }
+
+    // Mark as disabled
+    red.deshabilitada = true
+    await red.save()
+
+    const reportePop = await ReporteRed.findById(reporte._id).populate('redId', 'nombre deshabilitada').select('-reporterId')
+    return res.status(200).json({ msg: 'Reporte resuelto. Red deshabilitada', reporte: reportePop })
   } catch (error) {
     console.error(error)
     return res.status(500).json({ msg: 'Error en el servidor' })
@@ -209,8 +291,10 @@ const resolverReportePublicacionAdmin = async (req, res) => {
       return res.status(403).json({ msg: 'No estás autorizado para resolver este reporte' })
     }
 
+    const { eliminarPublicacion = false } = req.body
+
     if (estado === 'Rechazada') {
-      // Mark report as rejected instead of deleting
+      // Mark report as rejected and keep it in DB
       reporte.estado = 'rechazado'
       if (respuesta) reporte.respuesta = respuesta
       await reporte.save()
@@ -218,13 +302,28 @@ const resolverReportePublicacionAdmin = async (req, res) => {
       return res.status(200).json({ msg: 'Reporte rechazado', reporte: reportePop })
     }
 
-    // Resuelta: marcar como resuelta (mapear a valor del esquema)
+    // Resuelta: admin aprueba el reporte — siempre eliminar la publicación referenciada
     reporte.estado = 'resuelto'
     if (respuesta) reporte.respuesta = respuesta
     await reporte.save()
 
+    const publicacion = await Publicacion.findById(reporte.publicacionId)
+    if (!publicacion) {
+      // Publication missing — report is resolved but nothing to delete
+      const reportePop = await ReportePublicacion.findById(reporte._id).populate('publicacionId').populate('redId', 'nombre').select('-reporterId')
+      return res.status(200).json({ msg: 'Reporte resuelto. La publicación no existe (posible eliminación previa)', reporte: reportePop })
+    }
+
+    // Ensure publication belongs to the admin's assigned red
+    if (!publicacion.comunidadId || publicacion.comunidadId.toString() !== admin.redAsignada.toString()) {
+      return res.status(403).json({ msg: 'No estás autorizado para eliminar la publicación' })
+    }
+
+    // Delete the publication record (safe deletion)
+    await Publicacion.findByIdAndDelete(publicacion._id)
+
     const reportePop = await ReportePublicacion.findById(reporte._id).populate('publicacionId').populate('redId', 'nombre').select('-reporterId')
-    return res.status(200).json({ msg: 'Reporte de publicación resuelto', reporte: reportePop })
+    return res.status(200).json({ msg: 'Reporte resuelto y publicación eliminada', reporte: reportePop })
   } catch (error) {
     console.error(error)
     return res.status(500).json({ msg: 'Error en el servidor' })
@@ -251,6 +350,20 @@ const deleteReporteUsuario = async (req, res) => {
     const reporte = await ReporteUsuario.findById(id)
     if (!reporte) return res.status(404).json({ msg: 'Reporte de usuario no encontrado' })
     await ReporteUsuario.findByIdAndDelete(id)
+    return res.status(200).json({ msg: 'Reporte eliminado' })
+  } catch (error) {
+    console.error(error)
+    return res.status(500).json({ msg: 'Error en el servidor' })
+  }
+}
+
+// SuperAdmin: delete a red report
+const deleteReporteRed = async (req, res) => {
+  try {
+    const { id } = req.params
+    const reporte = await ReporteRed.findById(id)
+    if (!reporte) return res.status(404).json({ msg: 'Reporte de red no encontrado' })
+    await ReporteRed.findByIdAndDelete(id)
     return res.status(200).json({ msg: 'Reporte eliminado' })
   } catch (error) {
     console.error(error)
@@ -468,6 +581,34 @@ const listarMisReportesPublicacion = async (req, res) => {
     const estudianteId = req.user?._id
     const reportes = await ReportePublicacion.find({ reporterId: estudianteId }).populate('publicacionId').populate('redId', 'nombre').select('-reporterId').sort({ createdAt: -1 })
     return res.status(200).json({ reportes })
+  } catch (error) {
+    console.error(error)
+    return res.status(500).json({ msg: 'Error en el servidor' })
+  }
+}
+
+// Estudiante: listar sus reportes sobre redes
+const listarMisReportesRed = async (req, res) => {
+  try {
+    const estudianteId = req.user?._id
+    const reportes = await ReporteRed.find({ reporterId: estudianteId }).populate('redId', 'nombre deshabilitada').select('-reporterId').sort({ createdAt: -1 })
+    return res.status(200).json({ reportes })
+  } catch (error) {
+    console.error(error)
+    return res.status(500).json({ msg: 'Error en el servidor' })
+  }
+}
+
+// Estudiante: eliminar su propio reporte de red
+const deleteMiReporteRed = async (req, res) => {
+  try {
+    const { id } = req.params
+    const estudianteId = req.user?._id
+    const reporte = await ReporteRed.findById(id)
+    if (!reporte) return res.status(404).json({ msg: 'Reporte no encontrado' })
+    if (!reporte.reporterId || String(reporte.reporterId) !== String(estudianteId)) return res.status(403).json({ msg: 'No estás autorizado para eliminar este reporte' })
+    await ReporteRed.findByIdAndDelete(id)
+    return res.status(200).json({ msg: 'Reporte eliminado' })
   } catch (error) {
     console.error(error)
     return res.status(500).json({ msg: 'Error en el servidor' })
@@ -749,4 +890,4 @@ const resolverSolicitudVerificacion = async (req, res) => {
   }
 }
 
-export { crearReportePublicacion, crearReporteApp, crearReporteUsuario, listarReportesUsuarios, listarReportesApp, resolverReporteUsuario, resolverReporteApp, resolverReportePublicacionAdmin, listarReportesAdminRed, crearSolicitudVerificacion, listarSolicitudesVerificacion, resolverSolicitudVerificacion, crearSolicitudRehabilitar, listarSolicitudesRehabilitar, resolverSolicitudRehabilitar, crearSolicitudHabilitarUsuario, listarSolicitudesHabilitarUsuarios, resolverSolicitudHabilitarUsuario, deleteReporteUsuario, deleteReporteApp, deleteReportePublicacionAdmin, deleteSolicitudRehabilitar, deleteSolicitudHabilitarUsuario, deleteSolicitudVerificacion, deleteSolicitudRehabilitarByAdmin, listarMisSolicitudesRehabilitar, listarMisSolicitudesVerificacion, listarMisReportesPublicacion, deleteMiReportePublicacion, listarMisReportesApp, deleteMiReporteApp, listarMisReportesUsuario, deleteMiReporteUsuario, listarMisSolicitudesHabilitar, deleteMiSolicitudHabilitar }
+export { crearReportePublicacion, crearReporteRed, crearReporteApp, crearReporteUsuario, listarReportesUsuarios, listarReportesRedes, listarReportesApp, resolverReporteUsuario, resolverReporteRed, resolverReporteApp, resolverReportePublicacionAdmin, listarReportesAdminRed, crearSolicitudVerificacion, listarSolicitudesVerificacion, resolverSolicitudVerificacion, crearSolicitudRehabilitar, listarSolicitudesRehabilitar, resolverSolicitudRehabilitar, crearSolicitudHabilitarUsuario, listarSolicitudesHabilitarUsuarios, resolverSolicitudHabilitarUsuario, deleteReporteUsuario, deleteReporteRed, deleteReporteApp, deleteReportePublicacionAdmin, deleteSolicitudRehabilitar, deleteSolicitudHabilitarUsuario, deleteSolicitudVerificacion, deleteSolicitudRehabilitarByAdmin, listarMisSolicitudesRehabilitar, listarMisSolicitudesVerificacion, listarMisReportesPublicacion, deleteMiReportePublicacion, listarMisReportesRed, deleteMiReporteRed, listarMisReportesApp, deleteMiReporteApp, listarMisReportesUsuario, deleteMiReporteUsuario, listarMisSolicitudesHabilitar, deleteMiSolicitudHabilitar }

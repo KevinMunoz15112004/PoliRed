@@ -3,7 +3,7 @@ import { comprobarTokenPassword, crearNuevoPassword, recuperarPassword, login, p
 from '../controllers/SuperAdminController.js'
 import validators from '../validators/index.js'
 import validateResult from '../validators/validateResult.js'
-import { listarReportesUsuarios, listarReportesApp, resolverReporteUsuario, resolverReporteApp, listarSolicitudesVerificacion, resolverSolicitudVerificacion, listarSolicitudesRehabilitar, resolverSolicitudRehabilitar, deleteReporteUsuario, deleteReporteApp } from '../controllers/reportesController.js'
+import { listarReportesUsuarios, listarReportesRedes, listarReportesApp, resolverReporteUsuario, resolverReporteRed, resolverReporteApp, listarSolicitudesVerificacion, resolverSolicitudVerificacion, listarSolicitudesRehabilitar, resolverSolicitudRehabilitar, deleteReporteUsuario, deleteReporteRed, deleteReporteApp } from '../controllers/reportesController.js'
 import { deleteSolicitudRehabilitar, deleteSolicitudHabilitarUsuario, deleteSolicitudVerificacion } from '../controllers/reportesController.js'
 import { autenticarToken, isSuperAdmin } from '../middlewares/authSuperAdmin.js'
 import { verificarEstadoLogin } from '../middlewares/verificarLogin.js'
@@ -43,10 +43,13 @@ router.patch('/red/:id/verificada', autenticarToken, isSuperAdmin, validators.mo
 
 // Reportes desde la app
 router.get('/reportes/usuarios', autenticarToken, isSuperAdmin, listarReportesUsuarios)
+router.get('/reportes/redes', autenticarToken, isSuperAdmin, listarReportesRedes)
 router.get('/reportes/app', autenticarToken, isSuperAdmin, listarReportesApp)
 router.patch('/reportes/usuarios/:id/resolver', autenticarToken, isSuperAdmin, validators.mongoIdParam('id'), validateResult, resolverReporteUsuario)
+router.patch('/reportes/redes/:id/resolver', autenticarToken, isSuperAdmin, validators.mongoIdParam('id'), validateResult, resolverReporteRed)
 router.patch('/reportes/app/:id/resolver', autenticarToken, isSuperAdmin, validators.mongoIdParam('id'), validateResult, resolverReporteApp)
 router.delete('/reportes/usuarios/:id', autenticarToken, isSuperAdmin, validators.mongoIdParam('id'), validateResult, deleteReporteUsuario)
+router.delete('/reportes/redes/:id', autenticarToken, isSuperAdmin, validators.mongoIdParam('id'), validateResult, deleteReporteRed)
 router.delete('/reportes/app/:id', autenticarToken, isSuperAdmin, validators.mongoIdParam('id'), validateResult, deleteReporteApp)
 router.delete('/redes/rehabilitar/solicitudes/:id', autenticarToken, isSuperAdmin, validators.mongoIdParam('id'), validateResult, deleteSolicitudRehabilitar)
 router.delete('/superadmin/solicitudes/habilitar-usuarios/:id', autenticarToken, isSuperAdmin, validators.mongoIdParam('id'), validateResult, deleteSolicitudHabilitarUsuario)
