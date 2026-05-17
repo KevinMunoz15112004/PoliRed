@@ -67,7 +67,7 @@ const generarPlantillaHTML = (titulo, contenido) => `
 const sendMailToRecoveryPasswordE = async (userMail, token) => {
     try {
         let info = await transporter.sendMail({
-            from: '"PoliRed" <polired@policonecta.com>',
+            from: `"PoliRed" <${process.env.USER_MAILTRAP}>`,
             to: userMail,
             subject: "Restablece tu contraseña - PoliRed",
             html: generarPlantillaHTML(
@@ -86,7 +86,7 @@ const sendMailToRecoveryPasswordE = async (userMail, token) => {
 const sendMailToRecoveryPassword = async (userMail, token) => {
     try {
         let info = await transporter.sendMail({
-            from: '"PoliRed" <polired@policonecta.com>',
+            from: `"PoliRed" <${process.env.USER_MAILTRAP}>`,
             to: userMail,
             subject: "Restablece tu contraseña - PoliRed",
             html: generarPlantillaHTML(
@@ -105,7 +105,7 @@ const sendMailToRecoveryPassword = async (userMail, token) => {
 const sendMailToRegister = async (userMail, token) => {
     try {
         let info = await transporter.sendMail({
-            from: '"PoliRed" <polired@policonecta.com>',
+            from: `"PoliRed" <${process.env.USER_MAILTRAP}>`,
             to: userMail,
             subject: "Confirma tu cuenta en PoliRed",
             html: generarPlantillaHTML(
@@ -123,7 +123,7 @@ const sendMailToRegister = async (userMail, token) => {
 const enviarCorreoNuevoAdmin = async (correoOriginal, nuevoCorreo) => {
     try {
         let info = await transporter.sendMail({
-            from: '"PoliRed" <polired@policonecta.com>',
+            from: `"PoliRed" <${process.env.USER_MAILTRAP}>`,
             to: correoOriginal,
             subject: "Has sido promovido a Admin_Red - PoliRed",
             html: generarPlantillaHTML(
@@ -151,7 +151,7 @@ export {
 const sendMailRedAprobada = async (userMail, redName) => {
     try {
         let info = await transporter.sendMail({
-            from: '"PoliRed" <polired@policonecta.com>',
+            from: `"PoliRed" <${process.env.USER_MAILTRAP}>`,
             to: userMail,
             subject: `Tu red "${redName}" ha sido aprobada - PoliRed`,
             html: generarPlantillaHTML(
@@ -169,7 +169,7 @@ const sendMailRedAprobada = async (userMail, redName) => {
 const sendMailRedRechazada = async (userMail, redName) => {
     try {
         let info = await transporter.sendMail({
-            from: '"PoliRed" <polired@policonecta.com>',
+            from: `"PoliRed" <${process.env.USER_MAILTRAP}>`,
             to: userMail,
             subject: `Tu red "${redName}" fue rechazada - PoliRed`,
             html: generarPlantillaHTML(
