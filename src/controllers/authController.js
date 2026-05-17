@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs'
 
 export const signToken = (user, context = 'mobile') => {
   const payload = { id: user._id, roles: user.roles, context }
-  return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1d' })
+  return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '2h' })
 }
 
 export const login = async (req, res) => {

@@ -7,7 +7,7 @@ import fs from "fs-extra"
 import profileService from '../services/profileService.js'
 import AdminRed from '../models/adminRedes.js'
 import { sendMailToRecoveryPassword, sendMailToRegister, enviarCorreoNuevoAdmin } from "../config/nodemailer.js"
-import { crearTokenJWT } from "../middlewares/authSuperAdmin.js"
+import jwt from 'jsonwebtoken'
 // Validation is handled by centralized validators in src/validators/
 
 //Controladores para la gestión de la cuenta
@@ -34,6 +34,7 @@ const login = async (req, res) => {
     }
 
     const { nombre, apellido, _id, rol } = superAdminBDD
+    const crearTokenJWT = (id, rol) => jwt.sign({ id, rol }, process.env.JWT_SECRET, { expiresIn: '2h' })
     const token = crearTokenJWT(superAdminBDD._id, superAdminBDD.rol)
 
     res.status(200).json({

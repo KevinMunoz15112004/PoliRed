@@ -1,11 +1,6 @@
 import jwt from 'jsonwebtoken'
 import SuperAdmin from '../models/SuperAdmin.js'
 
-export const crearTokenJWT = (id, rol) => {
-
-    return jwt.sign({ id, rol }, process.env.JWT_SECRET, { expiresIn: "1d" })
-}
-
 export function isSuperAdmin(req, res, next) {
   if (req.user && req.user.rol === 'SuperAdmin') {
     return next();

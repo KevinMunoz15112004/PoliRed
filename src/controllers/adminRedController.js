@@ -11,13 +11,43 @@ import RedComunitaria from '../models/RedComunitaria.js'
 
 // Controladores para la gestión de la cuenta (login movido a /api/auth/login)
 
-const perfilAdminRed = (req, res) => {
-  delete req.user.token
-  delete req.user.confirmEmail
-  delete req.user.createdAt
-  delete req.user.updatedAt
-  delete req.user.__v
-  res.status(200).json(req.user)
+const perfilAdminRed = async (req, res) => {
+  try {
+    // Eliminar campos sensibles/irrelevantes
+    delete req.user.token
+    delete req.user.confirmEmail
+    delete req.user.createdAt
+    delete req.user.updatedAt
+    delete req.user.__v
+
+    // Ocultar únicamente la id de la red global si existe en el perfil
+    if (Array.isArray(req.user.redComunitaria) && req.user.redComunitaria.length > 0) {
+      try {
+        const globalReds = await RedComunitaria.find({ _id: { $in: req.user.redComunitaria }, esGlobal: true }).select('_id').lean()
+        if (Array.isArray(globalReds) && globalReds.length > 0) {
+          const globalIds = new Set(globalReds.map(r => String(r._id)))
+          req.user.redComunitaria = req.user.redComunitaria.filter(id => !globalIds.has(String(id)))
+        }
+      } catch (e) {
+        console.error('Error filtrando redes globales en perfilAdminRed:', e)
+      }
+    }
+
+    // Si existe redAsignada y corresponde a una red global, ocultarla también
+    if (req.user.redAsignada) {
+      try {
+        const red = await RedComunitaria.findById(req.user.redAsignada).select('esGlobal').lean()
+        if (red && red.esGlobal) delete req.user.redAsignada
+      } catch (e) {
+        console.error('Error comprobando redAsignada en perfilAdminRed:', e)
+      }
+    }
+
+    return res.status(200).json(req.user)
+  } catch (error) {
+    console.error('Error en perfilAdminRed:', error)
+    return res.status(500).json({ msg: 'Error en el servidor' })
+  }
 }
 
 const actualizarPerfilAdminRed = async (req, res) => {
