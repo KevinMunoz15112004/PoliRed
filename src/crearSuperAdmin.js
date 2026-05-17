@@ -13,18 +13,17 @@ const crearSuperAdmin = async () => {
   try {
     await connection()
 
-    const existe = await SuperAdmin.findOne({ email: 'usuario123xyz111@hotmail.com' })
+    const existe = await SuperAdmin.findOne({ email: 'PoliRed-SA@hotmail.com' })
     if (existe) {
       console.log('Ya existe un SuperAdmin con ese correo')
       return
     }
 
     const superAdmin = new SuperAdmin({
-      nombre: 'Super',
-      apellido: 'Admin',
-      celular: '0987256435',
-      email: 'holamunod1@hotmail.com',
-      password: await new SuperAdmin().encrypPassword('12345678'),
+      nombre: 'Jorge',
+      apellido: 'Perez',
+      email: 'PoliRed-SA@hotmail.com',
+      password: await new SuperAdmin().encrypPassword('PassSA990$'),
       confirmEmail: true,
       rol: 'SuperAdmin'
     })

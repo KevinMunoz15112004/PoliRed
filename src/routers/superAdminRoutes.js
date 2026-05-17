@@ -19,7 +19,6 @@ router.post('/login', verificarEstadoLogin, validators.loginValidator, validateR
 router.get('/perfil-superadmin', autenticarToken, isSuperAdmin, perfil)
 router.patch('/actualizar-superadmin/', autenticarToken, isSuperAdmin,
 	validators.actualizarPerfilValidator,
-	validators.phone('celular', { optional: true }),
 	validateResult,
 	actualizarPerfil)
 router.patch('/perfil/avatar', autenticarToken, isSuperAdmin, actualizarAvatar)

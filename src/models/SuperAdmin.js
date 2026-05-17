@@ -12,11 +12,6 @@ const superAdminSchema = new Schema({
         required:true,
         trim:true
     },
-    celular:{
-        type:String,
-        trim:true,
-        default:null
-    },
     email:{
         type:String,
         required:true,
@@ -44,11 +39,6 @@ const superAdminSchema = new Schema({
         default: null,
         trim: true,
     }, 
-    avatarIA: {
-        type: String,
-        default: null,
-        trim: true,
-    },
     rol:{
         type:String,
         default:"SuperAdmin"

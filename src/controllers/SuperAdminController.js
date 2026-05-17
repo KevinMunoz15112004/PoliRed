@@ -33,7 +33,7 @@ const login = async (req, res) => {
       return res.status(401).json({ msg: "Lo sentimos, la contraseña no es correcta" })
     }
 
-    const { nombre, apellido, celular, _id, rol } = superAdminBDD
+    const { nombre, apellido, _id, rol } = superAdminBDD
     const token = crearTokenJWT(superAdminBDD._id, superAdminBDD.rol)
 
     res.status(200).json({
@@ -41,7 +41,6 @@ const login = async (req, res) => {
       rol,
       nombre,
       apellido,
-      celular,
       _id,
       email: superAdminBDD.email
     })
@@ -124,7 +123,7 @@ const actualizarPerfil = async (req, res) => {
   try {
     const id = req.user._id;
 
-    const campos = ["nombre", "apellido", "direccion", "celular", "email"]
+    const campos = ["nombre", "apellido", "direccion", "email"]
     const datos = {};
 
     for (const campo of campos) {
