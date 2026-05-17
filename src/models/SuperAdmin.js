@@ -49,6 +49,24 @@ const superAdminSchema = new Schema({
 })
 
 
+// Normalizar email antes de guardar/actualizar (guardar en lowercase)
+superAdminSchema.pre('save', function(next) {
+    if (this.email && typeof this.email === 'string') {
+        this.email = this.email.trim().toLowerCase()
+    }
+    next()
+})
+
+superAdminSchema.pre('findOneAndUpdate', function(next) {
+    const update = this.getUpdate()
+    if (update && update.email && typeof update.email === 'string') {
+        update.email = update.email.trim().toLowerCase()
+        this.setUpdate(update)
+    }
+    next()
+})
+
+
 // Método para cifrar la contraseña del SuperAdmin
 superAdminSchema.methods.encrypPassword = async function(password){
     const salt = await bcrypt.genSalt(10)

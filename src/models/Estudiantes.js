@@ -116,4 +116,21 @@ estudianteSchema.methods.removeRole = async function (role) {
   }
 }
 
+// Normalizar email antes de guardar/actualizar (guardar en lowercase)
+estudianteSchema.pre('save', function(next) {
+  if (this.email && typeof this.email === 'string') {
+    this.email = this.email.trim().toLowerCase()
+  }
+  next()
+})
+
+estudianteSchema.pre('findOneAndUpdate', function(next) {
+  const update = this.getUpdate()
+  if (update && update.email && typeof update.email === 'string') {
+    update.email = update.email.trim().toLowerCase()
+    this.setUpdate(update)
+  }
+  next()
+})
+
 export default model('Estudiante', estudianteSchema, 'estudiantes');
