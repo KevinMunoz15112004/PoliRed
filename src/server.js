@@ -1,6 +1,3 @@
-import dns from 'dns'
-dns.setDefaultResultOrder('ipv4first')
-
 // Requerir los módulos
 import express from 'express'
 import dotenv from 'dotenv'
