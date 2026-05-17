@@ -11,12 +11,15 @@ const __dirname = path.dirname(__filename)
 dotenv.config({ path: path.join(__dirname, '../../.env') })
 
 let transporter = nodemailer.createTransport({
-    service: 'gmail', // O el servicio que uses si Mailtrap es solo para pruebas
-    host: process.env.HOST_MAILTRAP,
-    port: process.env.PORT_MAILTRAP,
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false,
     auth: {
         user: process.env.USER_MAILTRAP,
-        pass: process.env.PASS_MAILTRAP,
+        pass: process.env.PASS_MAILTRAP
+    },
+    tls: {
+        rejectUnauthorized: false
     }
 });
 
