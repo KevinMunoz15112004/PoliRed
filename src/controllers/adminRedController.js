@@ -52,7 +52,7 @@ const perfilAdminRed = async (req, res) => {
 
 const actualizarPerfilAdminRed = async (req, res) => {
   const id = req.user._id
-  const campos = ["nombre", "apellido", "celular", "email"]
+  const campos = ["nombre", "apellido", "email"]
   const datos = {}
 
   for (const campo of campos) {

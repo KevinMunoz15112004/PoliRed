@@ -22,7 +22,7 @@ const registroEstudiante = async (req, res) => {
     // Presencia y formato de campos (nombre, apellido, email, password)
     // son validados por los `validators` en las rutas.
 
-    // Nota: el campo `celular` fue eliminado del modelo; ya no se valida ni se guarda.
+    // Nota: el campo de teléfono fue eliminado del modelo; ya no se valida ni se guarda.
 
     const verificarEmailBDD = await Estudiante.findOne({ email })
     if (verificarEmailBDD) {

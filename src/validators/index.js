@@ -11,7 +11,6 @@ export const validators = {
   trimAndNotEmpty: common.trimAndNotEmpty,
   normalizeEmail: common.normalizeEmail,
   passwordField: common.passwordField,
-  phone: common.phone,
   number: common.numberField,
   // string
   name: string.nameValidator,

@@ -35,19 +35,7 @@ const passwordField = (field = 'password', { optional = false, min = 8 } = {}) =
     .isLength({ min }).withMessage(`La contraseña debe tener al menos ${min} caracteres`)
 }
 
-const phone = (field = 'celular', { optional = false } = {}) => {
-  const chain = body(field)
-  return (optional ? chain.optional() : chain.exists().withMessage('El celular es obligatorio'))
-    .bail()
-    .isString().withMessage('El celular debe ser un texto de números')
-    .bail()
-    .trim()
-    .notEmpty().withMessage('El celular no puede estar vacío')
-    .bail()
-    .isInt({ allow_leading_zeroes: false }).withMessage('El celular debe ser un número entero')
-    .bail()
-    .isLength({ min: 10, max: 10 }).withMessage('El celular debe tener 10 dígitos')
-}
+// Validator removed: related contact-number field is not used in the model.
 
 const booleanBody = (field = 'verificada', { optional = false } = {}) => {
   const chain = body(field)
@@ -65,5 +53,5 @@ const numberField = (field = 'number', { optional = false, min, max, integer = f
   return base.isFloat({ ...(min !== undefined ? { min } : {}), ...(max !== undefined ? { max } : {}) }).withMessage(`${field} debe ser un número válido${min !== undefined ? ' >= '+min : ''}${max !== undefined ? ' <= '+max : ''}`)
 }
 
-export { trimAndNotEmpty, normalizeEmail, passwordField, phone, booleanBody, numberField }
+export { trimAndNotEmpty, normalizeEmail, passwordField, booleanBody, numberField }
 

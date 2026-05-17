@@ -47,7 +47,6 @@ const actualizarPerfilValidator = [
     .bail()
     .trim()
     .isLength({ max: 150 }).withMessage('La biografía no puede exceder 150 caracteres'),
-  // celular handled as phone in commonValidators
   // email normalized if provided
   normalizeEmail('email', { optional: true })
 ]
