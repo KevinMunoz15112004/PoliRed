@@ -35,7 +35,7 @@ router.delete('/solicitudes/rehabilitar/:id', verifyToken, requireRole('admin_re
 router.get('/solicitudes/rehabilitar', verifyToken, requireRole('admin_red'), listarMisSolicitudesRehabilitar)
 router.get('/solicitudes/verificacion', verifyToken, requireRole('admin_red'), listarMisSolicitudesVerificacion)
 
-// Admin Red: crear solicitud para rehabilitar su red deshabilitada
+// Admin Red:crear solicitud para rehabilitar su red deshabilitada
 router.post('/solicitudes/rehabilitar', verifyToken, requireRole('admin_red'), validators.mongoIdBody('redId'), validators.description('descripcion', { optional: false }), validateResult, crearSolicitudRehabilitar)
 
 // Admin Red:solicitar verificación/oficialización de su red (solo su red asignada)
