@@ -27,11 +27,11 @@ router.patch('/admin/actualizar/red', verifyToken, requireRole('admin_red'), val
 router.get('/admin/estudiantes/listar', verifyToken, requireRole('admin_red'), verEstudiantesDeRed)
 router.delete('/admin/estudiantes/eliminar/:estudianteId', verifyToken, requireRole('admin_red'), validators.mongoIdParam('estudianteId'), validateResult, eliminarEstudianteDeRed)
 
-// Admin Red: resolver reportes de publicaciones de su red
+// Admin Red:resolver reportes de publicaciones de su red
 router.patch('/reportes/:id/resolver', verifyToken, requireRole('admin_red'), validators.mongoIdParam('id'), validateResult, resolverReportePublicacionAdmin)
 router.delete('/reportes/:id', verifyToken, requireRole('admin_red'), validators.mongoIdParam('id'), validateResult, deleteReportePublicacionAdmin)
 router.delete('/solicitudes/rehabilitar/:id', verifyToken, requireRole('admin_red'), validators.mongoIdParam('id'), validateResult, deleteSolicitudRehabilitarByAdmin)
-// Admin Red: listar sus propias solicitudes
+// Admin Red:listar sus propias solicitudes
 router.get('/solicitudes/rehabilitar', verifyToken, requireRole('admin_red'), listarMisSolicitudesRehabilitar)
 router.get('/solicitudes/verificacion', verifyToken, requireRole('admin_red'), listarMisSolicitudesVerificacion)
 
