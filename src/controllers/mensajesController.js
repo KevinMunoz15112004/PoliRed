@@ -1,3 +1,4 @@
+import mongoose from 'mongoose'
 import Mensaje from '../models/Mensajes.js'
 import Conversacion from '../models/Conversaciones.js'
 import Estudiante from '../models/Estudiantes.js'
@@ -166,6 +167,29 @@ export async function pusherAuth(req, res) {
   if (!socket_id || !channel_name) return res.status(400).json({ msg: 'socket_id y channel_name son requeridos' })
 
   try {
+    // Restrict auth for user-specific private/presence channels
+    if (channel_name.startsWith('private-user-')) {
+      const targetId = channel_name.replace('private-user-', '')
+      if (targetId !== String(req.user._id)) return res.status(403).json({ msg: 'No autorizado para este canal' })
+      const auth = pusher.authenticate(socket_id, channel_name)
+      return res.send(auth)
+    }
+
+    if (channel_name.startsWith('presence-user-')) {
+      const targetId = channel_name.replace('presence-user-', '')
+      if (targetId !== String(req.user._id)) return res.status(403).json({ msg: 'No autorizado para este canal' })
+      const presenceData = {
+        user_id: String(req.user._id),
+        user_info: {
+          nombre: req.user.nombre || null,
+          apellido: req.user.apellido || null,
+          fotoPerfil: req.user.fotoPerfil || null
+        }
+      }
+      const auth = pusher.authenticate(socket_id, channel_name, presenceData)
+      return res.send(auth)
+    }
+
     if (channel_name.startsWith('presence-')) {
       const presenceData = {
         user_id: String(req.user._id),
@@ -193,14 +217,19 @@ export async function pusherStatus(req, res) {
     if (!['online', 'offline'].includes(status)) return res.status(400).json({ msg: 'status inválido' })
 
     const userId = String(req.user._id)
-    const convers = await Conversacion.find({ participantes: userId }).lean()
+    // Use ObjectId for query and limit recipients to avoid excessive triggers
+    const oid = new mongoose.Types.ObjectId(userId)
+    const convers = await Conversacion.find({ participantes: oid }).lean()
     const others = new Set()
     convers.forEach(c => {
       (c.participantes || []).map(String).forEach(p => { if (p !== userId) others.add(p) })
     })
 
+    const MAX_NOTIFY = 200
+    const othersArray = Array.from(others).slice(0, MAX_NOTIFY)
+
     const payload = { userId, status, timestamp: new Date() }
-    for (const other of others) {
+    for (const other of othersArray) {
       try {
         await triggerUserChannel(other, `user_${status}`, payload)
       } catch (e) {
@@ -208,7 +237,7 @@ export async function pusherStatus(req, res) {
       }
     }
 
-    return res.json({ notified: Array.from(others).length })
+    return res.json({ notified: othersArray.length })
   } catch (e) {
     console.error('pusher status error', e)
     return res.status(500).json({ msg: 'Error interno' })
