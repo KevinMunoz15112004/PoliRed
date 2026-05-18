@@ -11,7 +11,6 @@ import profileService from '../services/profileService.js'
 import Publicacion from "../models/Publicaciones.js"
 import RedComunitaria from '../models/RedComunitaria.js'
 import { getGlobalIds, getGlobalRedDoc, filterOutGlobalIds, populateExcludeGlobalMatch, getGlobalId } from '../helpers/globalRed.js'
-// Stripe payment logic removed per request
 
 // NOTE: login functionality moved to /api/auth/login (authController)
 
