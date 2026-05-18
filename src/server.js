@@ -9,6 +9,7 @@ import estudiantesRoutes from './routers/estudiantesRoutes.js'
 import authRoutes from './routers/authRoutes.js'
 import adminRedes from './routers/adminRedRoutes.js'
 import socialRoutes from './routers/socialRoutes.js'
+import mensajesRoutes from './routers/mensajesRoutes.js'
 
 dotenv.config()
 
@@ -35,6 +36,7 @@ app.use('/api', authRoutes)
 app.use('/api', adminRedes)
 app.use('/api', estudiantesRoutes)
 app.use('/api', socialRoutes)
+app.use('/api', mensajesRoutes)
 
 app.get('/', (req, res) => {
     res.send("✅ Server On Vercel")

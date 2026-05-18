@@ -6,6 +6,7 @@ import Notificacion from '../models/Notificaciones.js'
 import RedComunitaria from '../models/RedComunitaria.js'
 import AdminRed from '../models/adminRedes.js'
 import { crearNotificacion } from '../helpers/notificaciones.js'
+import { triggerUserChannel } from '../config/pusher.js'
 import { sendMailRedAprobada, sendMailRedRechazada } from '../config/nodemailer.js'
 
 // Controladores para funcionalidades sociales
@@ -65,13 +66,24 @@ const darLikePublicacion = async (req, res) => {
     )
 
     if (addRes.modifiedCount && addRes.modifiedCount > 0) {
-      await crearNotificacion({
+      const notif = await crearNotificacion({
         usuarioId: publicacion.autorId,
         emisorId: estudianteId,
         tipo: 'like',
         publicacionId: publicacion._id,
         mensaje: 'Le dieron like a tu publicación'
       })
+
+      try {
+        await triggerUserChannel(String(publicacion.autorId), 'nueva_notificacion', {
+          tipo: 'like',
+          emisorId: estudianteId,
+          publicacionId: publicacion._id,
+          notificacion: notif
+        })
+      } catch (e) {
+        console.warn('Pusher notify like falló:', e.message || e)
+      }
 
       const pub = await Publicacion.findById(id).populate('likes', 'nombre apellido')
       return res.status(201).json({ msg: 'Like agregado', likes: pub.likes })

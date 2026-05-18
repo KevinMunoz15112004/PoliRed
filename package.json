@@ -7,7 +7,7 @@
   "scripts": {
     "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",
     "start": "node src/index.js",
-    "dev": "node --watch src/index.js"
+    "dev": "node --watch src/local.js"
   },
   "keywords": [],
   "author": "",
@@ -23,7 +23,8 @@
     "fs-extra": "^11.3.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.15.0",
-    "nodemailer": "^8.0.7"
+    "nodemailer": "^8.0.7",
+    "pusher": "^5.3.3"
   },
   "devDependencies": {
     "@babel/preset-env": "^7.28.0",
