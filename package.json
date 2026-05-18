@@ -23,8 +23,7 @@
     "fs-extra": "^11.3.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.15.0",
-    "nodemailer": "^8.0.7",
-    "socket.io": "^4.8.1"
+    "nodemailer": "^8.0.7"
   },
   "devDependencies": {
     "@babel/preset-env": "^7.28.0",

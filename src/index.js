@@ -1,11 +1,14 @@
-import dns from 'dns'
-dns.setDefaultResultOrder('ipv4first')
-
-import { app, server } from './server.js'
+import app from './server.js'
 import connection from './database.js'
 
-connection()
+let isConnected = false
 
-server.listen(app.get('port'),()=>{
-    console.log(`Server ok on PORT ${app.get('port')}`);
-})
+export default async function handler(req, res) {
+
+    if (!isConnected) {
+        await connection()
+        isConnected = true
+    }
+
+    return app(req, res)
+}
