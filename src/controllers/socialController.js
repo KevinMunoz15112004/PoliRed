@@ -1,13 +1,17 @@
 import mongoose from 'mongoose'
 import Estudiante from '../models/Estudiantes.js'
 import Publicacion from '../models/Publicaciones.js'
+import { Articulo } from '../models/Articulos.js'
 import Comentario from '../models/Comentarios.js'
 import Notificacion from '../models/Notificaciones.js'
 import RedComunitaria from '../models/RedComunitaria.js'
 import AdminRed from '../models/adminRedes.js'
 import { crearNotificacion } from '../helpers/notificaciones.js'
+import { _resolvePostDoc } from '../helpers/postResolver.js'
 import { triggerUserChannel } from '../config/pusher.js'
 import { sendMailRedAprobada, sendMailRedRechazada } from '../config/nodemailer.js'
+
+// Helper `_resolvePostDoc` moved to `src/helpers/postResolver.js`
 
 // Controladores para funcionalidades sociales
 
@@ -45,14 +49,16 @@ const darLikePublicacion = async (req, res) => {
 
     // ID validado por validators en rutas
 
-    const publicacion = await Publicacion.findById(id)
-    if (!publicacion) {
+    const resolved = await _resolvePostDoc(id)
+    if (!resolved) {
       return res.status(404).json({ msg: 'Publicación no encontrada' })
     }
+    const { comunidadId, autorId, isArticulo } = resolved
+    const Model = isArticulo ? Articulo : Publicacion
 
-    // Si la publicación pertenece a una comunidad deshabilitada, bloquear
-    if (publicacion.comunidadId) {
-      const red = await RedComunitaria.findById(publicacion.comunidadId)
+    // Si pertenece a una comunidad deshabilitada, bloquear
+    if (comunidadId) {
+      const red = await RedComunitaria.findById(comunidadId)
       if (red && red.deshabilitada) return res.status(403).json({ msg: 'No puedes dar like en publicaciones de una red deshabilitada' })
     }
 
@@ -60,37 +66,37 @@ const darLikePublicacion = async (req, res) => {
     const estudianteObjId = new mongoose.Types.ObjectId(estudianteId)
 
     // Añadir e incrementar en una sola operación atómica sólo si el usuario no tiene like aún
-    const addRes = await Publicacion.updateOne(
+    const addRes = await Model.updateOne(
       { _id: id, likes: { $ne: estudianteObjId } },
       { $addToSet: { likes: estudianteObjId }, $inc: { likesCount: 1 } }
     )
 
     if (addRes.modifiedCount && addRes.modifiedCount > 0) {
       const notif = await crearNotificacion({
-        usuarioId: publicacion.autorId,
+        usuarioId: autorId,
         emisorId: estudianteId,
         tipo: 'like',
-        publicacionId: publicacion._id,
+        publicacionId: id,
         mensaje: 'Le dieron like a tu publicación'
       })
 
       try {
-        await triggerUserChannel(String(publicacion.autorId), 'nueva_notificacion', {
+        await triggerUserChannel(String(autorId), 'nueva_notificacion', {
           tipo: 'like',
           emisorId: estudianteId,
-          publicacionId: publicacion._id,
+          publicacionId: id,
           notificacion: notif
         })
       } catch (e) {
         console.warn('Pusher notify like falló:', e.message || e)
       }
 
-      const pub = await Publicacion.findById(id).populate('likes', 'nombre apellido')
+      const pub = await Model.findById(id).populate('likes', 'nombre apellido')
       return res.status(201).json({ msg: 'Like agregado', likes: pub.likes })
     }
 
     // No se modificó: el usuario ya tenía like
-    const pub = await Publicacion.findById(id).populate('likes', 'nombre apellido')
+    const pub = await Model.findById(id).populate('likes', 'nombre apellido')
     return res.status(409).json({ msg: 'Ya diste like a esta publicación', likes: pub.likes })
   } catch (error) {
     console.error('Error al dar like:', error)
@@ -105,21 +111,22 @@ const quitarLikePublicacion = async (req, res) => {
 
     // ID validado por validators en rutas
 
-    const publicacion = await Publicacion.findById(id)
-    if (!publicacion) {
+    const resolved = await _resolvePostDoc(id)
+    if (!resolved) {
       return res.status(404).json({ msg: 'Publicación no encontrada' })
     }
+    const Model = resolved.isArticulo ? Articulo : Publicacion
 
     const estudianteObjId = new mongoose.Types.ObjectId(estudianteId)
 
     // Quitar y decrementar sólo si el usuario tenía like
-    const pullRes = await Publicacion.updateOne(
+    const pullRes = await Model.updateOne(
       { _id: id, likes: estudianteObjId },
       { $pull: { likes: estudianteObjId }, $inc: { likesCount: -1 } }
     )
 
     if (pullRes.modifiedCount && pullRes.modifiedCount > 0) {
-      const pub = await Publicacion.findById(id).populate('likes', 'nombre apellido')
+      const pub = await Model.findById(id).populate('likes', 'nombre apellido')
       return res.status(200).json({ msg: 'Like removido', likes: pub.likes })
     }
 
@@ -138,21 +145,22 @@ const crearComentarioPublicacion = async (req, res) => {
     const estudianteId = req.user?._id
 
     // ID validado por validators en rutas
-
     // `contenido` validado por validators en rutas
 
-    const publicacion = await Publicacion.findById(id)
-    if (!publicacion) {
+    const resolved = await _resolvePostDoc(id)
+    if (!resolved) {
       return res.status(404).json({ msg: 'Publicación no encontrada' })
     }
+    const { doc, autorId, comunidadId, isArticulo } = resolved
+    const Model = isArticulo ? Articulo : Publicacion
 
-    if (publicacion.comunidadId) {
-      const red = await RedComunitaria.findById(publicacion.comunidadId)
+    if (comunidadId) {
+      const red = await RedComunitaria.findById(comunidadId)
       if (red && red.deshabilitada) return res.status(403).json({ msg: 'No puedes comentar en publicaciones de una red deshabilitada' })
     }
 
     const comentario = await Comentario.create({
-      postId: publicacion._id,
+      postId: doc._id,
       userId: estudianteId,
       contenido: contenido.trim(),
       parentId: null
@@ -161,14 +169,14 @@ const crearComentarioPublicacion = async (req, res) => {
     // popular comentario con datos del usuario
     const comentarioPop = await Comentario.findById(comentario._id).populate('userId', 'nombre apellido')
 
-    // Incrementar commentsCount de forma atómica en la publicación
-    await Publicacion.updateOne({ _id: publicacion._id }, { $inc: { commentsCount: 1 } })
+    // Incrementar commentsCount de forma atómica
+    await Model.updateOne({ _id: doc._id }, { $inc: { commentsCount: 1 } })
 
     await crearNotificacion({
-      usuarioId: publicacion.autorId,
+      usuarioId: autorId,
       emisorId: estudianteId,
       tipo: 'comentario',
-      publicacionId: publicacion._id,
+      publicacionId: doc._id,
       comentarioId: comentario._id,
       mensaje: 'Comentaron tu publicación'
     })
@@ -187,7 +195,6 @@ const responderComentario = async (req, res) => {
     const estudianteId = req.user?._id
 
     // ID validado por validators en rutas
-
     // `contenido` validado por validators en rutas
 
     const comentarioPadre = await Comentario.findById(comentarioId)
@@ -195,10 +202,11 @@ const responderComentario = async (req, res) => {
       return res.status(404).json({ msg: 'Comentario padre no encontrado' })
     }
 
+    // Verificar comunidad deshabilitada (funciona para Publicacion y Articulo)
     if (comentarioPadre.postId) {
-      const post = await Publicacion.findById(comentarioPadre.postId)
-      if (post && post.comunidadId) {
-        const red = await RedComunitaria.findById(post.comunidadId)
+      const resolved = await _resolvePostDoc(comentarioPadre.postId.toString())
+      if (resolved && resolved.comunidadId) {
+        const red = await RedComunitaria.findById(resolved.comunidadId)
         if (red && red.deshabilitada) return res.status(403).json({ msg: 'No puedes responder comentarios en una red deshabilitada' })
       }
     }
@@ -213,9 +221,13 @@ const responderComentario = async (req, res) => {
     comentarioPadre.hijos.push(respuesta._id)
     await comentarioPadre.save()
 
-    // Incrementar contador de comentarios en el post
+    // Incrementar contador de comentarios en Publicacion o Articulo
     if (comentarioPadre.postId) {
-      await Publicacion.updateOne({ _id: comentarioPadre.postId }, { $inc: { commentsCount: 1 } })
+      const resolved = await _resolvePostDoc(comentarioPadre.postId.toString())
+      if (resolved) {
+        const Model = resolved.isArticulo ? Articulo : Publicacion
+        await Model.updateOne({ _id: comentarioPadre.postId }, { $inc: { commentsCount: 1 } })
+      }
     }
 
     await crearNotificacion({
@@ -276,17 +288,17 @@ const guardarPublicacion = async (req, res) => {
 
     // ID validado por validators en rutas
 
-    const [estudiante, publicacion] = await Promise.all([
-      Estudiante.findById(estudianteId),
-      Publicacion.findById(id)
-    ])
+    // Verificar que el documento existe (Publicacion o Articulo)
+    const resolved = await _resolvePostDoc(id)
+    const estudiante = await Estudiante.findById(estudianteId)
 
-    if (!estudiante || !publicacion) {
+    if (!estudiante || !resolved) {
       return res.status(404).json({ msg: 'Estudiante o publicación no encontrados' })
     }
 
-    if (!estudiante.publicacionesGuardadas.some((postId) => postId.equals(publicacion._id))) {
-      estudiante.publicacionesGuardadas.push(publicacion._id)
+    const docId = resolved.doc._id
+    if (!estudiante.publicacionesGuardadas.some((postId) => postId.equals(docId))) {
+      estudiante.publicacionesGuardadas.push(docId)
       await estudiante.save()
     }
 

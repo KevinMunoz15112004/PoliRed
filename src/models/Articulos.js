@@ -12,7 +12,19 @@ const articuloSchema = new mongoose.Schema({
   categoria: { type: String, enum: ['venta', 'cursos'], default: 'venta' },
   autorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Estudiante' },
   redComunitaria: { type: mongoose.Schema.Types.ObjectId, ref: 'RedComunitaria' },
-  vendido: { type: Boolean, default: false }
+  vendido: { type: Boolean, default: false },
+  likes: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Estudiante'
+  }],
+  likesCount: {
+    type: Number,
+    default: 0
+  },
+  commentsCount: {
+    type: Number,
+    default: 0
+  }
 }, { timestamps: true })
 
 export const Articulo = mongoose.model('Articulo', articuloSchema, 'articulos')
