@@ -253,7 +253,7 @@ const listarComentariosArbol = async (req, res) => {
     // ID validado por validators en rutas
 
     const comentarios = await Comentario.find({ postId: id })
-      .populate('userId', 'nombre apellido email')
+      .populate('userId', 'nombre apellido email username')
       .sort({ createdAt: 1 })
       .lean()
 
@@ -648,6 +648,24 @@ const asignarDuenoRed = async (req, res) => {
   }
 }
 
+const listarLikesPublicacion = async (req, res) => {
+  try {
+    const { id } = req.params
+    const resolved = await _resolvePostDoc(id)
+
+    if (!resolved) {
+      return res.status(404).json({ msg: 'Publicación no encontrada' })
+    }
+
+    const Model = resolved.isArticulo ? Articulo : Publicacion
+    const pub = await Model.findById(id).populate('likes', 'nombre apellido username fotoPerfil email')
+    return res.status(200).json({ likes: pub.likes || [] })
+  } catch (error) {
+    console.error('Error al listar likes:', error)
+    return res.status(500).json({ msg: 'Error en el servidor' })
+  }
+}
+
 export {
   solicitarCreacionRed,
   darLikePublicacion,
@@ -664,5 +682,6 @@ export {
   listarRedesPendientesAprobacion,
   resolverAprobacionRed,
   revocarAdminRed,
-  asignarDuenoRed
+  asignarDuenoRed,
+  listarLikesPublicacion
 }

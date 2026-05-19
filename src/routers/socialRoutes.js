@@ -20,6 +20,7 @@ import {
   resolverAprobacionRed,
   revocarAdminRed,
   asignarDuenoRed,
+  listarLikesPublicacion,
 } from '../controllers/socialController.js'
 import { requirePerfilCompleto } from '../middlewares/checkPerfilCompleto.js'
 import { crearReportePublicacion, crearReporteApp, crearReporteUsuario, listarReportesAdminRed } from '../controllers/reportesController.js'
@@ -31,6 +32,7 @@ router.post('/redes/solicitar-creacion', verifyToken, validators.title('nombre')
 
 router.post('/publicaciones/:id/like', verifyToken, requirePerfilCompleto, validators.mongoIdParam('id'), validateResult, darLikePublicacion)
 router.delete('/publicaciones/:id/like', verifyToken, requirePerfilCompleto, validators.mongoIdParam('id'), validateResult, quitarLikePublicacion)
+router.get('/publicaciones/:id/likes', verifyToken, validators.mongoIdParam('id'), validateResult, listarLikesPublicacion)
 
 router.post('/publicaciones/:id/comentarios', verifyToken, requirePerfilCompleto, validators.mongoIdParam('id'), validators.trimAndNotEmpty('contenido'), validateResult, crearComentarioPublicacion)
 router.post('/comentarios/:comentarioId/responder', verifyToken, requirePerfilCompleto, validators.mongoIdParam('comentarioId'), validators.trimAndNotEmpty('contenido'), validateResult, responderComentario)
