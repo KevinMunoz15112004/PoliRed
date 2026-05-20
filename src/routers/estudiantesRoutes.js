@@ -1,5 +1,5 @@
 import {Router} from 'express'
-import { registroEstudiante, confirmarMailEstudiante, comprobarTokenPasswordEstudiante, recuperarPasswordEstudiante, crearNuevoPasswordEstudiante, perfilEstudiante, actualizarUsername, completarPerfil, actualizarPerfilEstudiante, actualizarPasswordEstudiante, crearPublicacion, unirseARedComunitaria, salirseDeRedComunitaria, listarRedesDelEstudiante, listarPublicacionesPorRed, listarPublicacionesGlobal, listarPublicacionesComunidades, obtenerRedesComunitarias, obtenerPerfilRed, publicarArticulo, listarArticulosPorRed, listarArticulosGlobal, listarArticulosComunidades, eliminarArticulo, eliminarPublicacion, obtenerEstudiantes } 
+import { registroEstudiante, confirmarMailEstudiante, comprobarTokenPasswordEstudiante, recuperarPasswordEstudiante, crearNuevoPasswordEstudiante, perfilEstudiante, actualizarUsername, completarPerfil, actualizarPerfilEstudiante, actualizarPasswordEstudiante, crearPublicacion, unirseARedComunitaria, salirseDeRedComunitaria, listarRedesDelEstudiante, listarPublicacionesPorRed, listarPublicacionesGlobal, listarPublicacionesComunidades, obtenerRedesComunitarias, obtenerPerfilRed, publicarArticulo, listarArticulosPorRed, listarArticulosGlobal, listarArticulosComunidades, eliminarArticulo, eliminarPublicacion, obtenerEstudiantes, obtenerPerfilPublicoInfo, obtenerPerfilPublicoFeed } 
 from '../controllers/estudiantesController.js'
 import { requirePerfilCompleto, disallowPerfilCompleto } from '../middlewares/checkPerfilCompleto.js'
 import { verifyToken } from '../middlewares/auth.js'
@@ -47,6 +47,8 @@ router.post('/estudiantes/salirse/red', verifyToken, validators.mongoIdBody('red
 
 //Rutas para la gestión de mensajes
 router.get('/cargar/estudiantes', verifyToken, obtenerEstudiantes)
+router.get('/perfil-publico/:usuarioId/info', verifyToken, validators.mongoIdParam('usuarioId'), validateResult, obtenerPerfilPublicoInfo)
+router.get('/perfil-publico/:usuarioId/feed', verifyToken, validators.mongoIdParam('usuarioId'), validateResult, obtenerPerfilPublicoFeed)
 
 // Solicitud para que un estudiante suspendido pida ser habilitado
 router.post('/estudiantes/solicitud-habilitar', verifyToken, validators.rehabilitarUsuarioValidator, validateResult, crearSolicitudHabilitarUsuario)

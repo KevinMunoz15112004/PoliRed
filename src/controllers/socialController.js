@@ -335,20 +335,52 @@ const listarPublicacionesGuardadas = async (req, res) => {
   try {
     const estudianteId = req.user?._id
 
-    const estudiante = await Estudiante.findById(estudianteId)
-      .populate({
-        path: 'publicacionesGuardadas',
-        populate: [
-          { path: 'autorId', select: 'nombre apellido fotoPerfil' },
-          { path: 'comunidadId', select: 'nombre' }
-        ]
-      })
-
+    const estudiante = await Estudiante.findById(estudianteId).lean()
     if (!estudiante) {
       return res.status(404).json({ msg: 'Estudiante no encontrado' })
     }
 
-    return res.status(200).json({ guardados: estudiante.publicacionesGuardadas })
+    const ids = estudiante.publicacionesGuardadas || []
+    if (ids.length === 0) {
+      return res.status(200).json({ guardados: [] })
+    }
+
+    // Buscar en Publicaciones
+    const publicaciones = await Publicacion.find({ _id: { $in: ids } })
+      .populate('autorId', 'nombre apellido username fotoPerfil')
+      .populate('comunidadId', 'nombre')
+      .lean()
+
+    // Buscar en Articulos
+    const articulos = await Articulo.find({ _id: { $in: ids } })
+      .populate('autorId', 'nombre apellido username fotoPerfil')
+      .populate('redComunitaria', 'nombre')
+      .lean()
+
+    const guardadosIds = ids.map(id => id.toString())
+    const combined = [...publicaciones, ...articulos]
+
+    // Mapear cada elemento agregando las banderas sociales
+    const mapped = combined.map(post => {
+      const likes = post.likes || []
+      const isLiked = likes.some(id => id.toString() === estudianteId.toString())
+      const isSaved = guardadosIds.includes(post._id.toString())
+      return {
+        ...post,
+        likedByMe: isLiked,
+        isLiked: isLiked,
+        savedByMe: isSaved,
+        isSaved: isSaved
+      }
+    })
+
+    // Mantener el orden original de guardados (de más reciente a más antiguo guardado, o según el array original)
+    const idMap = new Map(mapped.map(p => [p._id.toString(), p]))
+    const ordenados = ids
+      .map(id => idMap.get(id.toString()))
+      .filter(Boolean)
+
+    return res.status(200).json({ guardados: ordenados })
   } catch (error) {
     console.error('Error al listar guardados:', error)
     return res.status(500).json({ msg: 'Error en el servidor' })
@@ -359,13 +391,58 @@ const listarPublicacionesLiked = async (req, res) => {
   try {
     const estudianteId = req.user?._id
 
+    // Buscar estudiante para obtener los guardados
+    const estudiante = await Estudiante.findById(estudianteId).lean()
+    if (!estudiante) {
+      return res.status(404).json({ msg: 'Estudiante no encontrado' })
+    }
+    const guardadosIds = (estudiante.publicacionesGuardadas || []).map(id => id.toString())
+
     // Buscar publicaciones cuyo array `likes` contenga al estudiante
     const publicaciones = await Publicacion.find({ likes: estudianteId })
-      .populate('autorId', 'nombre apellido fotoPerfil')
+      .populate('autorId', 'nombre apellido username fotoPerfil')
       .populate('comunidadId', 'nombre')
-      .sort({ createdAt: -1 })
+      .lean()
 
-    return res.status(200).json({ liked: publicaciones })
+    // Buscar artículos cuyo array `likes` contenga al estudiante
+    const articulos = await Articulo.find({ likes: estudianteId })
+      .populate('autorId', 'nombre apellido username fotoPerfil')
+      .populate('redComunitaria', 'nombre')
+      .lean()
+
+    const combined = [...publicaciones, ...articulos]
+
+    // Mapear cada elemento agregando las banderas sociales
+    const mapped = combined.map(post => {
+      const likes = post.likes || []
+      const isLiked = likes.some(id => id.toString() === estudianteId.toString())
+      const isSaved = guardadosIds.includes(post._id.toString())
+      return {
+        ...post,
+        likedByMe: isLiked,
+        isLiked: isLiked,
+        savedByMe: isSaved,
+        isSaved: isSaved
+      }
+    })
+
+    // Ordenar combinados por fecha de creación (createdAt) descendente
+    mapped.sort((a, b) => {
+      const dateA = new Date(a.createdAt || a.timestamp || 0)
+      const dateB = new Date(b.createdAt || b.timestamp || 0)
+      return dateB - dateA
+    })
+
+    // Paginación básica si se envía en la query
+    const page = parseInt(req.query.page, 10) || 1
+    const limit = parseInt(req.query.limit, 10) || 10
+    const startIndex = (page - 1) * limit
+    const paginated = mapped.slice(startIndex, startIndex + limit)
+
+    return res.status(200).json({
+      likes: paginated,
+      liked: paginated
+    })
   } catch (error) {
     console.error('Error al listar publicaciones con like:', error)
     return res.status(500).json({ msg: 'Error en el servidor' })

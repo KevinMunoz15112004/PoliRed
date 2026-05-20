@@ -184,8 +184,12 @@ const perfilEstudiante = async (req, res) => {
     delete req.user.updatedAt
     delete req.user.__v
 
-    // Count total publicaciones authored by this estudiante (across todas las redes)
-    const publicacionesCount = await Publicacion.countDocuments({ autorId: req.user._id })
+    // Count total publicaciones and articulos authored by this estudiante
+    const [postsCount, articlesCount] = await Promise.all([
+      Publicacion.countDocuments({ autorId: req.user._id }),
+      Articulo.countDocuments({ autorId: req.user._id })
+    ]);
+    const publicacionesCount = postsCount + articlesCount;
 
     // Excluir redes globales del objeto `req.user` antes de enviarlo al frontend
     const redesGlobalIdsSet = new Set(await getGlobalIds())
@@ -331,6 +335,7 @@ const actualizarPerfilEstudiante = async (req, res) => {
   if (apellido) estudianteBDD.apellido = apellido
   if (typeof biografia !== 'undefined') {
     const bioTrim = biografia === null ? null : String(biografia).trim()
+    // La longitud y formato de `biografia` son validados por `validators.actualizarPerfilValidator` en las rutas
     estudianteBDD.biografia = bioTrim
   }
   if (redComunitaria) {
@@ -472,7 +477,8 @@ const listarRedesDelEstudiante = async (req, res) => {
       return res.status(404).json({ msg: "Estudiante no encontrado" })
     }
 
-    res.status(200).json({ redes: estudiante.redComunitaria })
+    const filteredRedes = (estudiante.redComunitaria || []).filter(Boolean);
+    res.status(200).json({ redes: filteredRedes })
   } catch (error) {
     console.error(error)
     res.status(500).json({ msg: "Error del servidor" })
@@ -482,8 +488,6 @@ const listarRedesDelEstudiante = async (req, res) => {
 const salirseDeRedComunitaria = async (req, res) => {
   const estudianteId = req.user?._id
   const { redId } = req.body
-
-  
 
   try {
     const red = await RedComunitaria.findById(redId)
@@ -530,7 +534,7 @@ const crearPublicacion = async (req, res) => {
   try {
     const { titulo, contenido, comunidadId, categoria, tipoContenido } = req.body
     const estudianteId = req.user?._id
-    // categoria validated by validators in routes; normalize for internal use
+    // `categoria` y campos relacionados son validados por los `validators` en las rutas
     const cat = String(categoria).trim().toLowerCase()
 
     let targetComunidadId = comunidadId
@@ -555,10 +559,8 @@ const crearPublicacion = async (req, res) => {
       return res.status(404).json({ msg: "Estudiante no encontrado" })
     }
 
-    // tipoContenido validated by validators in routes; normalize for internal use
+    // Tipo de contenido ya validado por los validators; solo gestionar media si corresponde
     const tipo = tipoContenido ? String(tipoContenido).trim().toLowerCase() : 'texto'
-
-    // For imagen: accept up to 3 images via `mediaUrls` (body) or uploaded files `imagen`
     let finalMediaUrls = []
     if (tipo === 'imagen') {
       try {
@@ -754,15 +756,26 @@ const publicarArticulo = async (req, res) => {
       return res.status(404).json({ msg: "Estudiante no encontrado" })
     }
 
-    // categoria and precio validated by validators in routes; normalize category
+    // `categoria` y campos relacionados son validados por `validators.publicarArticuloValidator` en las rutas
     const cat = String(categoria).trim().toLowerCase()
 
-    // Normalize precio for storage: 'Gratis' or numeric
+    // `precio` validado por los validators; aquí se normaliza/convierte según la lógica de negocio
+
     let precioGuardado
-    if (typeof precio === 'string' && precio.trim().toLowerCase() === 'gratis') {
-      precioGuardado = 'Gratis'
+    if (typeof precio === 'string') {
+      if (precio.trim().toLowerCase() === 'gratis') {
+        precioGuardado = 'Gratis'
+      } else {
+        // try parse as number
+        const parsed = Number(precio)
+        if (Number.isNaN(parsed) || parsed < 0) return res.status(400).json({ msg: 'Precio inválido' })
+        precioGuardado = parsed
+      }
+    } else if (typeof precio === 'number') {
+      if (!isFinite(precio) || precio < 0) return res.status(400).json({ msg: 'Precio inválido' })
+      precioGuardado = precio
     } else {
-      precioGuardado = Number(precio)
+      return res.status(400).json({ msg: 'Precio inválido' })
     }
 
     // Determine target comunidad: optional -> default to global
@@ -802,10 +815,8 @@ const publicarArticulo = async (req, res) => {
       }
     }
 
-    // tipoContenido validated by validators in routes; normalize
+    // Tipo de contenido validado por los validators; cuando sea imagen, procesar media
     const tipo = tipoContenido ? String(tipoContenido).trim().toLowerCase() : 'texto'
-
-    // Normalize and upload media (body field `mediaUrls` or files field `imagen`)
     let finalMediaUrls = []
     if (tipo === 'imagen') {
       try {
@@ -817,8 +828,6 @@ const publicarArticulo = async (req, res) => {
         return res.status(500).json({ msg: 'Error procesando imágenes', code: 'UNKNOWN_ERROR' })
       }
     }
-
-    // (validated above) tipoContenido and media handling already performed
 
     const articuloCategoria = cat === 'cursos' ? 'cursos' : 'venta'
 
@@ -963,15 +972,32 @@ const eliminarArticulo = async (req, res) => {
 
 const obtenerEstudiantes = async (req, res) => {
   try {
-    const estudiantes = await Estudiante.find({ status: true, rol: 'Estudiante' })
-      .select('_id nombre apellido email');
+    const { page = 1, limit = 10 } = req.query;
+    const pageNumber = Math.max(parseInt(page, 10) || 1, 1);
+    const limitNumber = Math.min(Math.max(parseInt(limit, 10) || 10, 1), 50);
+    const skip = (pageNumber - 1) * limitNumber;
 
-    res.json(estudiantes);
+    const [estudiantes, total] = await Promise.all([
+      Estudiante.find({ status: true, rol: 'Estudiante' })
+        .select('_id nombre apellido email username fotoPerfil biografia redComunitaria')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNumber),
+      Estudiante.countDocuments({ status: true, rol: 'Estudiante' })
+    ]);
+
+    res.json({
+      page: pageNumber,
+      total,
+      hasMore: skip + estudiantes.length < total,
+      items: estudiantes
+    });
   } catch (error) {
     console.error('Error al obtener estudiantes:', error);
     res.status(500).json({ msg: 'Error al obtener estudiantes' });
   }
-}
+};
+
 // Obtener perfil de una red (datos + publicaciones paginadas)
 const obtenerPerfilRed = async (req, res) => {
   try {
@@ -1017,6 +1043,99 @@ const obtenerPerfilRed = async (req, res) => {
   }
 }
 
+const obtenerPerfilPublicoInfo = async (req, res) => {
+  try {
+    const { usuarioId } = req.params;
+
+    // `usuarioId` validado por `validators.mongoIdParam('usuarioId')` en la ruta
+
+    const estudiante = await Estudiante.findOne({ _id: usuarioId, status: true })
+      .select('_id nombre apellido username fotoPerfil biografia redComunitaria')
+      .populate({ path: 'redComunitaria', select: '_id nombre fotoPerfil acronym', ...(populateExcludeGlobalMatch()) });
+
+    if (!estudiante) {
+      return res.status(404).json({ msg: 'Estudiante no encontrado' });
+    }
+
+    const [postsCount, articlesCount] = await Promise.all([
+      Publicacion.countDocuments({ autorId: usuarioId }),
+      Articulo.countDocuments({ autorId: usuarioId })
+    ]);
+
+    const filteredRedes = (estudiante.redComunitaria || []).filter(Boolean);
+
+    const stats = {
+      publicacionesCount: postsCount + articlesCount,
+      redesCount: filteredRedes.length
+    };
+
+    return res.status(200).json({
+      _id: estudiante._id,
+      nombre: estudiante.nombre,
+      apellido: estudiante.apellido,
+      username: estudiante.username,
+      fotoPerfil: estudiante.fotoPerfil,
+      biografia: estudiante.biografia,
+      redComunitaria: filteredRedes,
+      stats
+    });
+  } catch (error) {
+    console.error('Error al obtener perfil público:', error);
+    return res.status(500).json({ msg: 'Error en el servidor' });
+  }
+}
+
+const obtenerPerfilPublicoFeed = async (req, res) => {
+  try {
+    const { usuarioId } = req.params;
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.max(parseInt(req.query.limit, 10) || 12, 1);
+    const skip = (page - 1) * limit;
+
+    // `usuarioId` validado por `validators.mongoIdParam('usuarioId')` en la ruta
+
+    const queryLimit = page * limit;
+    const [posts, articles] = await Promise.all([
+      Publicacion.find({ autorId: usuarioId })
+        .populate('autorId', 'nombre apellido username fotoPerfil')
+        .populate('comunidadId', 'nombre')
+        .sort({ timestamp: -1, createdAt: -1 })
+        .limit(queryLimit),
+      Articulo.find({ autorId: usuarioId })
+        .populate('autorId', 'nombre apellido username fotoPerfil')
+        .populate('redComunitaria', 'nombre')
+        .sort({ createdAt: -1 })
+        .limit(queryLimit)
+    ]);
+
+    const merged = [...posts, ...articles];
+
+    merged.sort((a, b) => {
+      const dateA = a.timestamp || a.createdAt || 0;
+      const dateB = b.timestamp || b.createdAt || 0;
+      return new Date(dateB) - new Date(dateA);
+    });
+
+    const items = merged.slice(skip, skip + limit);
+
+    const [totalPosts, totalArticles] = await Promise.all([
+      Publicacion.countDocuments({ autorId: usuarioId }),
+      Articulo.countDocuments({ autorId: usuarioId })
+    ]);
+    const total = totalPosts + totalArticles;
+
+    return res.status(200).json({
+      page,
+      total,
+      hasMore: skip + items.length < total,
+      items
+    });
+  } catch (error) {
+    console.error('Error al obtener feed público:', error);
+    return res.status(500).json({ msg: 'Error en el servidor' });
+  }
+}
+
 export {
   registroEstudiante,
   confirmarMailEstudiante,
@@ -1043,5 +1162,7 @@ export {
   eliminarArticulo,
   listarArticulosGlobal,
   listarArticulosComunidades,
-  obtenerEstudiantes
+  obtenerEstudiantes,
+  obtenerPerfilPublicoInfo,
+  obtenerPerfilPublicoFeed
 }
