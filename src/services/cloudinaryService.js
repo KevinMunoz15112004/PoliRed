@@ -1,5 +1,6 @@
 import cloudinary from 'cloudinary'
 import fs from 'fs-extra'
+import { PassThrough } from 'stream'
 
 const uploadFiles = async (files, folder, publicIdPrefix = '') => {
   if (!files || files.length === 0) return []
@@ -7,12 +8,30 @@ const uploadFiles = async (files, folder, publicIdPrefix = '') => {
   const uploadOne = async (file, idx) => {
     try {
       const public_id = `${publicIdPrefix}_${Date.now()}_${idx}_${Math.random().toString(36).slice(2,8)}`
-      const res = await cloudinary.uploader.upload(file.tempFilePath, {
-        folder,
-        public_id,
-        overwrite: true
+      const uploadFromStream = () => new Promise((resolve, reject) => {
+        const callback = (error, result) => {
+          if (error) return reject(error)
+          return resolve(result && result.secure_url)
+        }
+
+        const uploadStream = cloudinary.uploader.upload_stream({ folder, public_id, overwrite: true }, callback)
+
+        if (file && file.data) {
+          const bufferStream = new PassThrough()
+          bufferStream.end(file.data)
+          bufferStream.pipe(uploadStream)
+        } else if (file && file.tempFilePath) {
+          const readStream = fs.createReadStream(file.tempFilePath)
+          readStream.on('error', reject)
+          readStream.pipe(uploadStream)
+        } else {
+          // No data available to upload
+          return reject(new Error('No file data or tempFilePath'))
+        }
       })
-      return res.secure_url
+
+      const secureUrl = await uploadFromStream()
+      return secureUrl
     } catch (err) {
       console.error('Cloudinary upload error:', err)
       throw {
