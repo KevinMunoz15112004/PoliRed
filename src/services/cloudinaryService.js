@@ -1,26 +1,33 @@
-import cloudinary from 'cloudinary'
+import { v2 as cloudinary } from 'cloudinary'
 import fs from 'fs-extra'
-import { PassThrough } from 'stream'
 
 const uploadFiles = async (files, folder, publicIdPrefix = '') => {
-  if (!files || files.length === 0) return []
+  if (!files) return []
+
+  const normalizedFiles = Array.isArray(files) ? files : [files]
 
   const uploadOne = async (file, idx) => {
     try {
       const public_id = `${publicIdPrefix}_${Date.now()}_${idx}_${Math.random().toString(36).slice(2,8)}`
       const uploadFromStream = () => new Promise((resolve, reject) => {
         const callback = (error, result) => {
+          console.log('Cloudinary upload callback for', public_id, 'error:', error, 'result:', result && result.secure_url)
           if (error) return reject(error)
           return resolve(result && result.secure_url)
         }
 
+        console.log('Cloudinary: starting upload_stream for', public_id)
         const uploadStream = cloudinary.uploader.upload_stream({ folder, public_id, overwrite: true }, callback)
 
         if (file && file.data) {
-          const bufferStream = new PassThrough()
-          bufferStream.end(file.data)
-          bufferStream.pipe(uploadStream)
+          try {
+            console.log('Cloudinary: sending buffer data for', public_id, 'size:', file.data && file.data.length)
+            uploadStream.end(file.data)
+          } catch (e) {
+            return reject(e)
+          }
         } else if (file && file.tempFilePath) {
+          console.log('Cloudinary: piping temp file', file.tempFilePath, 'for', public_id)
           const readStream = fs.createReadStream(file.tempFilePath)
           readStream.on('error', reject)
           readStream.pipe(uploadStream)
@@ -31,6 +38,7 @@ const uploadFiles = async (files, folder, publicIdPrefix = '') => {
       })
 
       const secureUrl = await uploadFromStream()
+      console.log('Cloudinary secure_url obtained for', public_id, secureUrl)
       return secureUrl
     } catch (err) {
       console.error('Cloudinary upload error:', err)
@@ -49,7 +57,7 @@ const uploadFiles = async (files, folder, publicIdPrefix = '') => {
   }
 
   // Upload in parallel
-  const promises = files.map((f, i) => uploadOne(f, i))
+  const promises = normalizedFiles.map((f, i) => uploadOne(f, i))
   const results = await Promise.all(promises)
   return results.filter(Boolean)
 }

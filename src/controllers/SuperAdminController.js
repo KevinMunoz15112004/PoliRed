@@ -2,7 +2,7 @@ import SuperAdmin from '../models/SuperAdmin.js'
 import mongoose from 'mongoose'
 import Estudiante from '../models/Estudiantes.js'
 import RedComunitaria from '../models/RedComunitaria.js'
-import cloudinary from 'cloudinary'
+import { v2 as cloudinary } from 'cloudinary'
 import fs from "fs-extra"
 import profileService from '../services/profileService.js'
 import AdminRed from '../models/adminRedes.js'

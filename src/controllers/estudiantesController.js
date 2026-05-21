@@ -5,7 +5,7 @@ import { Articulo } from '../models/Articulos.js'
 import { sendMailToRegister, sendMailToRecoveryPasswordE } from '../config/nodemailer.js'
 import SuperAdmin from '../models/SuperAdmin.js'
 import fs from 'fs-extra'
-import cloudinary from 'cloudinary'
+import { v2 as cloudinary } from 'cloudinary'
 import mediaService from '../services/mediaService.js'
 import profileService from '../services/profileService.js'
 import Publicacion from "../models/Publicaciones.js"
@@ -272,6 +272,7 @@ const completarPerfil = async (req, res) => {
     // If an image file or fotoPerfil provided in body, handle centrally
     try {
       const url = await profileService.handleProfileImage({ req, bodyField: 'fotoPerfil', filesField: 'imagen', folder: 'avatar_estudiantes', publicIdPrefix: estudianteId, required: false })
+      console.log('URL DEVUELTA:', url)
       if (url) estudiante.fotoPerfil = url
     } catch (err) {
       if (err && err.type === 'VALIDATION') return res.status(400).json({ msg: err.message, code: err.code })
@@ -285,6 +286,7 @@ const completarPerfil = async (req, res) => {
       estudiante.biografia = bioTrim || null
     }
     estudiante.perfilCompleto = true
+    console.log('fotoPerfil antes de guardar:', estudiante.fotoPerfil)
     await estudiante.save()
 
     return res.status(200).json({ msg: 'Perfil completado', usuario: {

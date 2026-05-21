@@ -1,7 +1,7 @@
 import express from 'express'
 import dotenv from 'dotenv'
 import cors from 'cors'
-import cloudinary from 'cloudinary'
+import { v2 as cloudinary } from 'cloudinary'
 import fileUpload from "express-fileupload"
 
 import superAdminRoutes from './routers/superAdminRoutes.js'
