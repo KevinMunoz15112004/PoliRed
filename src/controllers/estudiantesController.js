@@ -310,8 +310,16 @@ const actualizarPerfilEstudiante = async (req, res) => {
 
   // El ID es validado por los validators en las rutas
 
-  const tieneDatos = Object.values(req.body).some(valor => valor && valor.trim() !== "")
-  if (!tieneDatos) {
+  // Permitir actualizar sólo con una imagen: considerar tanto campos en body como archivos subidos
+  const tieneDatosEnBody = Object.values(req.body || {}).some(valor => {
+    if (valor === null || typeof valor === 'undefined') return false
+    if (typeof valor === 'string') return valor.trim() !== ''
+    return true
+  })
+
+  const tieneArchivoImagen = req.files && (Array.isArray(req.files.imagen) ? req.files.imagen.length > 0 : !!req.files.imagen)
+
+  if (!tieneDatosEnBody && !tieneArchivoImagen) {
     return res.status(400).json({ msg: "Lo sentimos, debes llenar al menos un campo para actualizar" })
   }
 
@@ -371,7 +379,8 @@ const actualizarPerfilEstudiante = async (req, res) => {
       apellido: estudianteBDD.apellido,
       email: estudianteBDD.email,
       redComunitaria: redComunitariaSafe,
-      biografia: estudianteBDD.biografia
+      biografia: estudianteBDD.biografia,
+      fotoPerfil: estudianteBDD.fotoPerfil
     }
   })
 }
