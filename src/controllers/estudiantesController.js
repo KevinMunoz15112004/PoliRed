@@ -306,7 +306,7 @@ const completarPerfil = async (req, res) => {
 
 const actualizarPerfilEstudiante = async (req, res) => {
   const { id } = req.params;
-  const { nombre, apellido, email, redComunitaria, biografia } = req.body
+  const { nombre, apellido, email, redComunitaria, biografia } = req.body || {}
 
   // El ID es validado por los validators en las rutas
 
