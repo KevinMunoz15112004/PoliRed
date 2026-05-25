@@ -12,6 +12,20 @@ const notificacionSchema = new mongoose.Schema({
     ref: 'Estudiante',
     default: null
   },
+  emisores: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Estudiante'
+  }],
+  totalEmisores: {
+    type: Number,
+    default: 1
+  },
+  emisorSnap: {
+    nombre: String,
+    apellido: String,
+    username: String,
+    fotoPerfil: String
+  },
   tipo: {
     type: String,
     enum: ['like', 'comentario', 'respuesta_comentario', 'mensaje'],

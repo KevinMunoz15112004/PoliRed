@@ -5,7 +5,6 @@ import { Articulo } from '../models/Articulos.js'
 import { sendMailToRegister, sendMailToRecoveryPasswordE } from '../config/nodemailer.js'
 import SuperAdmin from '../models/SuperAdmin.js'
 import fs from 'fs-extra'
-import { v2 as cloudinary } from 'cloudinary'
 import mediaService from '../services/mediaService.js'
 import profileService from '../services/profileService.js'
 import Publicacion from "../models/Publicaciones.js"
@@ -541,26 +540,31 @@ const salirseDeRedComunitaria = async (req, res) => {
 
 const crearPublicacion = async (req, res) => {
   try {
-    const { titulo, contenido, comunidadId, categoria, tipoContenido } = req.body
+    const { titulo, contenido, comunidadId, categoria, tipoContenido, feedContext } = req.body
     const estudianteId = req.user?._id
     // `categoria` y campos relacionados son validados por los `validators` en las rutas
     const cat = String(categoria).trim().toLowerCase()
+    const ctx = feedContext ? String(feedContext).trim().toLowerCase() : ''
+
+    if (ctx !== 'home' && ctx !== 'global') {
+      return res.status(400).json({ msg: 'feedContext explícito es obligatorio ("home" o "global")' })
+    }
 
     let targetComunidadId = comunidadId
     let redGlobal = null
 
-    // Reglas específicas por categoría
-    if (cat === 'comunidad') {
-      // Must provide comunidadId and it must NOT be global
-      if (!targetComunidadId) return res.status(400).json({ msg: 'La categoría "Comunidad" requiere el id de una red comunitaria' })
-      // comunidadId format validated by validators in routes
-    } else {
-      // noticias: comunidadId optional -> default to global
-      if (!targetComunidadId) {
-        redGlobal = await getGlobalRedDoc()
-        if (!redGlobal) return res.status(500).json({ msg: 'No hay red global configurada' })
-        targetComunidadId = redGlobal._id.toString()
+    // Validaciones estrictas según feedContext (Backend valida, NO infiere)
+    if (ctx === 'home') {
+      if (cat !== 'comunidad') return res.status(400).json({ msg: 'feedContext "home" requiere categoría "comunidad"' })
+      if (!targetComunidadId) return res.status(400).json({ msg: 'feedContext "home" requiere el id de una red comunitaria' })
+    } else if (ctx === 'global') {
+      if (!['noticias', 'venta', 'cursos'].includes(cat)) {
+        return res.status(400).json({ msg: 'feedContext "global" requiere categoría "noticias", "venta" o "cursos"' })
       }
+      // Forzar target a red global
+      redGlobal = await getGlobalRedDoc()
+      if (!redGlobal) return res.status(500).json({ msg: 'No hay red global configurada' })
+      targetComunidadId = redGlobal._id.toString()
     }
 
     const estudianteBDD = await Estudiante.findById(estudianteId)
@@ -591,9 +595,9 @@ const crearPublicacion = async (req, res) => {
     const pertenece = estudianteBDD.redComunitaria && estudianteBDD.redComunitaria.some(r => r.equals(targetComunidadId))
     const esGlobalTarget = Boolean(redDoc.esGlobal)
 
-    if (cat === 'comunidad') {
-      // comunidad: user must belong to that red (no auto-join), and red must not be global
-      if (esGlobalTarget) return res.status(400).json({ msg: 'No se puede publicar categoría Comunidad en la red global' })
+    if (ctx === 'home') {
+      // home: user must belong to that red (no auto-join), and red must not be global
+      if (esGlobalTarget) return res.status(400).json({ msg: 'No se puede publicar en home usando la red global' })
       if (!pertenece) return res.status(403).json({ msg: 'No perteneces a esta red comunitaria' })
     } else {
       // noticias/cursos: if target is global and user not member, auto-join; if non-global and user not member -> forbid
@@ -630,6 +634,10 @@ const crearPublicacion = async (req, res) => {
     })
 
     await nuevaPublicacion.save()
+    await nuevaPublicacion.populate('autorId', 'nombre apellido username fotoPerfil')
+    if (targetComunidadId) {
+      await nuevaPublicacion.populate('comunidadId', 'nombre siglas avatar')
+    }
 
     return res.status(201).json({
       msg: "Publicación creada correctamente",
@@ -670,6 +678,7 @@ const eliminarPublicacion = async (req, res) => {
 const listarPublicacionesPorRed = async (req, res) => {
   try {
     const { redId } = req.params
+    const { page = 1, limit = 20 } = req.query
 
     // `redId` validado por validators en rutas
 
@@ -678,17 +687,21 @@ const listarPublicacionesPorRed = async (req, res) => {
       return res.status(404).json({ msg: 'Red comunitaria no encontrada' })
     }
 
-    const publicaciones = await Publicacion.find({ comunidadId: redId })
-      .populate('autorId', 'nombre apellido fotoPerfil')
-      .populate('comunidadId', 'nombre')
-      .sort({ timestamp: -1 });
+    const pageNumber = Math.max(parseInt(page, 10) || 1, 1)
+    const limitNumber = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50)
+    const skip = (pageNumber - 1) * limitNumber
 
-    return res.status(200).json({
-      msg: publicaciones.length > 0
-        ? 'Publicaciones encontradas'
-        : 'Aún no hay publicaciones en esta red',
-      publicaciones
-    })
+    const [items, total] = await Promise.all([
+      Publicacion.find({ comunidadId: redId })
+        .populate('autorId', 'nombre apellido username fotoPerfil')
+        .populate('comunidadId', 'nombre')
+        .sort({ timestamp: -1, createdAt: -1 })
+        .skip(skip)
+        .limit(limitNumber),
+      Publicacion.countDocuments({ comunidadId: redId })
+    ])
+
+    return res.status(200).json({ page: pageNumber, total, items })
   } catch (error) {
     console.error('Error al listar publicaciones por red:', error)
     res.status(500).json({ msg: 'Error en el servidor' })
@@ -757,7 +770,7 @@ const listarPublicacionesComunidades = async (req, res) => {
 
 const publicarArticulo = async (req, res) => {
   try {
-    const { titulo, descripcion, precio, comunidadId, categoria, tipoContenido } = req.body
+    const { titulo, descripcion, precio, comunidadId, categoria, tipoContenido, feedContext } = req.body
     const estudianteId = req.user?._id
 
     const estudianteBDD = await Estudiante.findById(estudianteId)
@@ -767,6 +780,15 @@ const publicarArticulo = async (req, res) => {
 
     // `categoria` y campos relacionados son validados por `validators.publicarArticuloValidator` en las rutas
     const cat = String(categoria).trim().toLowerCase()
+    const ctx = feedContext ? String(feedContext).trim().toLowerCase() : ''
+
+    if (ctx !== 'global') {
+      return res.status(400).json({ msg: 'Los artículos solo pueden publicarse en la red global (feedContext: "global")' })
+    }
+
+    if (!['venta', 'cursos'].includes(cat)) {
+      return res.status(400).json({ msg: 'Categoría inválida para artículos' })
+    }
 
     // `precio` validado por los validators; aquí se normaliza/convierte según la lógica de negocio
 
@@ -787,14 +809,10 @@ const publicarArticulo = async (req, res) => {
       return res.status(400).json({ msg: 'Precio inválido' })
     }
 
-    // Determine target comunidad: optional -> default to global
-    let targetComunidadId = comunidadId
-    let redGlobal = null
-    if (!targetComunidadId) {
-      redGlobal = await getGlobalRedDoc()
-      if (!redGlobal) return res.status(500).json({ msg: 'No hay red global configurada' })
-      targetComunidadId = redGlobal._id.toString()
-    }
+    // Forzar target a red global (Backend valida y aplica la regla de negocio)
+    let redGlobal = await getGlobalRedDoc()
+    if (!redGlobal) return res.status(500).json({ msg: 'No hay red global configurada' })
+    let targetComunidadId = redGlobal._id.toString()
 
     const redDoc = await RedComunitaria.findById(targetComunidadId)
     if (!redDoc) return res.status(404).json({ msg: 'Red comunitaria no encontrada' })
@@ -852,6 +870,8 @@ const publicarArticulo = async (req, res) => {
     })
 
     await nuevoArticulo.save()
+    await nuevoArticulo.populate('autorId', 'nombre apellido username fotoPerfil')
+    await nuevoArticulo.populate('redComunitaria', 'nombre siglas avatar')
 
     return res.status(201).json({
       msg: "Artículo publicado correctamente",
@@ -865,25 +885,35 @@ const publicarArticulo = async (req, res) => {
 
 
 // Listar artículos que pertenecen a la red global
+// Soporta filtro opcional por ?categoria=venta|cursos
 const listarArticulosGlobal = async (req, res) => {
   try {
-    const { page = 1, limit = 10 } = req.query
+    const { page = 1, limit = 20, categoria } = req.query
 
     const redGlobal = await getGlobalRedDoc()
     if (!redGlobal) return res.status(404).json({ msg: 'No hay red global configurada' })
 
     const pageNumber = Math.max(parseInt(page, 10) || 1, 1)
-    const limitNumber = Math.min(Math.max(parseInt(limit, 10) || 10, 1), 50)
+    const limitNumber = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50)
     const skip = (pageNumber - 1) * limitNumber
 
+    // Construir filtro: siempre rojo global, opcionalmente por categoría
+    const filter = { redComunitaria: redGlobal._id }
+    if (categoria) {
+      const cat = String(categoria).trim().toLowerCase()
+      if (cat === 'venta' || cat === 'cursos') {
+        filter.categoria = cat
+      }
+    }
+
     const [items, total] = await Promise.all([
-      Articulo.find({ redComunitaria: redGlobal._id })
+      Articulo.find(filter)
         .populate('autorId', 'nombre apellido username fotoPerfil')
         // Evitar popular la red global en la respuesta
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limitNumber),
-      Articulo.countDocuments({ redComunitaria: redGlobal._id })
+      Articulo.countDocuments(filter)
     ])
 
     return res.status(200).json({ page: pageNumber, total, items })

@@ -72,23 +72,74 @@ const darLikePublicacion = async (req, res) => {
     )
 
     if (addRes.modifiedCount && addRes.modifiedCount > 0) {
-      const notif = await crearNotificacion({
-        usuarioId: autorId,
-        emisorId: estudianteId,
-        tipo: 'like',
-        publicacionId: id,
-        mensaje: 'Le dieron like a tu publicación'
-      })
+      if (estudianteId.toString() !== autorId.toString()) {
+        const unaHoraAtras = new Date(Date.now() - 60 * 60 * 1000);
 
-      try {
-        await triggerUserChannel(String(autorId), 'nueva_notificacion', {
+        // Buscar notificación madre existente de likes en esta publicación
+        const notifExistente = await Notificacion.findOne({
+          usuarioId: autorId,
           tipo: 'like',
-          emisorId: estudianteId,
           publicacionId: id,
-          notificacion: notif
-        })
-      } catch (e) {
-        console.warn('Pusher notify like falló:', e.message || e)
+          createdAt: { $gte: unaHoraAtras }
+        });
+
+        if (notifExistente) {
+          // Actualizar: agregar emisor si no está ya
+          const yaEsta = notifExistente.emisores.some(
+            e => e.toString() === estudianteId.toString()
+          );
+          if (!yaEsta) {
+            await Notificacion.findByIdAndUpdate(notifExistente._id, {
+              $addToSet: { emisores: estudianteId },
+              $inc: { totalEmisores: 1 },
+              emisorId: estudianteId, // el más reciente es el principal
+              leida: false,
+              updatedAt: new Date()
+            });
+            // Emitir actualización a Pusher
+            await triggerUserChannel(
+              autorId.toString(),
+              'notificacion_actualizada',
+              { notificacionId: notifExistente._id.toString() }
+            );
+          }
+        } else {
+          // Crear nueva notificación madre
+          const emisorData = await Estudiante.findById(estudianteId)
+            .select('nombre apellido username fotoPerfil').lean();
+
+          const nueva = await Notificacion.create({
+            usuarioId: autorId,
+            emisorId: estudianteId,
+            emisores: [estudianteId],
+            totalEmisores: 1,
+            emisorSnap: {
+              nombre: emisorData.nombre,
+              apellido: emisorData.apellido,
+              username: emisorData.username,
+              fotoPerfil: emisorData.fotoPerfil
+            },
+            tipo: 'like',
+            publicacionId: id,
+            leida: false
+          });
+
+          // Emitir nueva notificación a Pusher
+          await triggerUserChannel(
+            autorId.toString(),
+            'nueva_notificacion',
+            {
+              _id: nueva._id.toString(),
+              tipo: 'like',
+              emisorSnap: emisorData,
+              totalEmisores: 1,
+              publicacionId: id.toString(),
+              leida: false,
+              createdAt: nueva.createdAt,
+              updatedAt: nueva.updatedAt
+            }
+          );
+        }
       }
 
       const pub = await Model.findById(id).populate('likes', 'nombre apellido')
@@ -172,14 +223,29 @@ const crearComentarioPublicacion = async (req, res) => {
     // Incrementar commentsCount de forma atómica
     await Model.updateOne({ _id: doc._id }, { $inc: { commentsCount: 1 } })
 
-    await crearNotificacion({
-      usuarioId: autorId,
-      emisorId: estudianteId,
-      tipo: 'comentario',
-      publicacionId: doc._id,
-      comentarioId: comentario._id,
-      mensaje: 'Comentaron tu publicación'
-    })
+    if (estudianteId.toString() !== autorId.toString()) {
+      const emisorData = await Estudiante.findById(estudianteId).select('nombre apellido username fotoPerfil').lean();
+      const notificacion = await crearNotificacion({
+        usuarioId: autorId,
+        emisorId: estudianteId,
+        tipo: 'comentario',
+        publicacionId: doc._id,
+        comentarioId: comentario._id,
+        mensaje: 'Comentaron tu publicación'
+      });
+
+      await triggerUserChannel(autorId.toString(), 'nueva_notificacion', {
+        _id: notificacion._id.toString(),
+        tipo: notificacion.tipo,
+        emisorSnap: emisorData,
+        publicacionId: notificacion.publicacionId?.toString(),
+        comentarioId: notificacion.comentarioId?.toString(),
+        mensaje: notificacion.mensaje,
+        leida: false,
+        createdAt: notificacion.createdAt,
+        updatedAt: notificacion.updatedAt
+      });
+    }
 
     return res.status(201).json({ msg: 'Comentario creado', comentario: comentarioPop })
   } catch (error) {
@@ -230,14 +296,29 @@ const responderComentario = async (req, res) => {
       }
     }
 
-    await crearNotificacion({
-      usuarioId: comentarioPadre.userId,
-      emisorId: estudianteId,
-      tipo: 'respuesta_comentario',
-      publicacionId: comentarioPadre.postId,
-      comentarioId: respuesta._id,
-      mensaje: 'Respondieron a tu comentario'
-    })
+    if (estudianteId.toString() !== comentarioPadre.userId.toString()) {
+      const emisorData = await Estudiante.findById(estudianteId).select('nombre apellido username fotoPerfil').lean();
+      const notificacion = await crearNotificacion({
+        usuarioId: comentarioPadre.userId,
+        emisorId: estudianteId,
+        tipo: 'respuesta_comentario',
+        publicacionId: comentarioPadre.postId,
+        comentarioId: respuesta._id,
+        mensaje: 'Respondieron a tu comentario'
+      });
+
+      await triggerUserChannel(comentarioPadre.userId.toString(), 'nueva_notificacion', {
+        _id: notificacion._id.toString(),
+        tipo: notificacion.tipo,
+        emisorSnap: emisorData,
+        publicacionId: notificacion.publicacionId?.toString(),
+        comentarioId: notificacion.comentarioId?.toString(),
+        mensaje: notificacion.mensaje,
+        leida: false,
+        createdAt: notificacion.createdAt,
+        updatedAt: notificacion.updatedAt
+      });
+    }
 
     return res.status(201).json({ msg: 'Respuesta creada', respuesta })
   } catch (error) {
@@ -452,7 +533,11 @@ const listarPublicacionesLiked = async (req, res) => {
 const listarNotificaciones = async (req, res) => {
   try {
     const estudianteId = req.user?._id
-    const notifs = await Notificacion.find({ usuarioId: estudianteId }).sort({ createdAt: -1 })
+    const notifs = await Notificacion.find({ usuarioId: estudianteId })
+      .populate('emisorId', 'nombre apellido username fotoPerfil')
+      .populate('emisores', 'nombre apellido username fotoPerfil')
+      .sort({ updatedAt: -1 })
+      .limit(50)
     return res.status(200).json({ notificaciones: notifs })
   } catch (error) {
     console.error('Error al listar notificaciones:', error)
@@ -547,12 +632,30 @@ const resolverAprobacionRed = async (req, res) => {
       await red.save()
 
       // Notificar al creador
-      await crearNotificacion({
-        usuarioId: user._id,
-        emisorId: req.user?._id || null,
-        tipo: 'mensaje',
-        mensaje: 'Tu solicitud de creación de red fue aprobada'
-      })
+      const emisorIdVal = req.user?._id || null;
+      if (!emisorIdVal || user._id.toString() !== emisorIdVal.toString()) {
+        const notificacion = await crearNotificacion({
+          usuarioId: user._id,
+          emisorId: emisorIdVal,
+          tipo: 'mensaje',
+          mensaje: 'Tu solicitud de creación de red fue aprobada'
+        });
+        
+        let emisorData = null;
+        if (emisorIdVal) {
+          emisorData = await Estudiante.findById(emisorIdVal).select('nombre apellido username fotoPerfil').lean();
+        }
+
+        await triggerUserChannel(user._id.toString(), 'nueva_notificacion', {
+          _id: notificacion._id.toString(),
+          tipo: notificacion.tipo,
+          emisorSnap: emisorData,
+          mensaje: notificacion.mensaje,
+          leida: false,
+          createdAt: notificacion.createdAt,
+          updatedAt: notificacion.updatedAt
+        });
+      }
 
       try {
         if (user.email) {
@@ -573,12 +676,30 @@ const resolverAprobacionRed = async (req, res) => {
       await RedComunitaria.findByIdAndDelete(red._id)
 
       if (creadoPorId) {
-        await crearNotificacion({
-          usuarioId: creadoPorId,
-          emisorId: req.user?._id || null,
-          tipo: 'mensaje',
-          mensaje: 'Tu solicitud de creación de red fue rechazada'
-        })
+        const emisorIdVal = req.user?._id || null;
+        if (!emisorIdVal || creadoPorId.toString() !== emisorIdVal.toString()) {
+          const notificacion = await crearNotificacion({
+            usuarioId: creadoPorId,
+            emisorId: emisorIdVal,
+            tipo: 'mensaje',
+            mensaje: 'Tu solicitud de creación de red fue rechazada'
+          });
+          
+          let emisorData = null;
+          if (emisorIdVal) {
+            emisorData = await Estudiante.findById(emisorIdVal).select('nombre apellido username fotoPerfil').lean();
+          }
+
+          await triggerUserChannel(creadoPorId.toString(), 'nueva_notificacion', {
+            _id: notificacion._id.toString(),
+            tipo: notificacion.tipo,
+            emisorSnap: emisorData,
+            mensaje: notificacion.mensaje,
+            leida: false,
+            createdAt: notificacion.createdAt,
+            updatedAt: notificacion.updatedAt
+          });
+        }
 
         try {
           const creador = await Estudiante.findById(creadoPorId)
@@ -634,12 +755,30 @@ const revocarAdminRed = async (req, res) => {
     }
 
     // Crear notificación interna
-    await crearNotificacion({
-      usuarioId: user._id,
-      emisorId: req.user?._id || null,
-      tipo: 'mensaje',
-      mensaje: motivo || `Se te ha revocado el rol de admin de la red ${red.nombre}`
-    })
+    const emisorIdVal = req.user?._id || null;
+    if (!emisorIdVal || user._id.toString() !== emisorIdVal.toString()) {
+      const notificacion = await crearNotificacion({
+        usuarioId: user._id,
+        emisorId: emisorIdVal,
+        tipo: 'mensaje',
+        mensaje: motivo || `Se te ha revocado el rol de admin de la red ${red.nombre}`
+      });
+
+      let emisorData = null;
+      if (emisorIdVal) {
+        emisorData = await Estudiante.findById(emisorIdVal).select('nombre apellido username fotoPerfil').lean();
+      }
+
+      await triggerUserChannel(user._id.toString(), 'nueva_notificacion', {
+        _id: notificacion._id.toString(),
+        tipo: notificacion.tipo,
+        emisorSnap: emisorData,
+        mensaje: notificacion.mensaje,
+        leida: false,
+        createdAt: notificacion.createdAt,
+        updatedAt: notificacion.updatedAt
+      });
+    }
 
     return res.status(200).json({ msg: 'Rol revocado correctamente', red })
   } catch (error) {
@@ -705,12 +844,30 @@ const asignarDuenoRed = async (req, res) => {
     await red.save()
 
     // Notificar y opcionalmente enviar correo
-    await crearNotificacion({
-      usuarioId: user._id,
-      emisorId: req.user?._id || null,
-      tipo: 'mensaje',
-      mensaje: `Has sido asignado como administrador de la red ${red.nombre}`
-    })
+    const emisorIdVal = req.user?._id || null;
+    if (!emisorIdVal || user._id.toString() !== emisorIdVal.toString()) {
+      const notificacion = await crearNotificacion({
+        usuarioId: user._id,
+        emisorId: emisorIdVal,
+        tipo: 'mensaje',
+        mensaje: `Has sido asignado como administrador de la red ${red.nombre}`
+      });
+
+      let emisorData = null;
+      if (emisorIdVal) {
+        emisorData = await Estudiante.findById(emisorIdVal).select('nombre apellido username fotoPerfil').lean();
+      }
+
+      await triggerUserChannel(user._id.toString(), 'nueva_notificacion', {
+        _id: notificacion._id.toString(),
+        tipo: notificacion.tipo,
+        emisorSnap: emisorData,
+        mensaje: notificacion.mensaje,
+        leida: false,
+        createdAt: notificacion.createdAt,
+        updatedAt: notificacion.updatedAt
+      });
+    }
 
     try {
       if (user.email) await sendMailRedAprobada(user.email, red.nombre)

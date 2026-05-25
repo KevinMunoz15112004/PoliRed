@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { sendMessage, getOrCreateConversation, getConversationMessages, markAsRead, pusherAuth, pusherStatus } from '../controllers/mensajesController.js'
+import { sendMessage, getOrCreateConversation, getConversationMessages, markAsRead, pusherAuth, pusherStatus, getConversaciones } from '../controllers/mensajesController.js'
 import { verifyToken } from '../middlewares/auth.js'
 
 const router = Router()
@@ -9,6 +9,9 @@ router.post('/send', verifyToken, sendMessage)
 
 // Obtener o crear conversación entre dos usuarios y traer últimos mensajes
 router.get('/entre/:otherId', verifyToken, getOrCreateConversation)
+
+// Obtener todas las conversaciones del usuario
+router.get('/conversaciones', verifyToken, getConversaciones)
 
 // Cargar mensajes de una conversación (paginación simple)
 router.get('/conversacion/:id', verifyToken, getConversationMessages)

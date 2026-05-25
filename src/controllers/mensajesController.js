@@ -243,3 +243,32 @@ export async function pusherStatus(req, res) {
     return res.status(500).json({ msg: 'Error interno' })
   }
 }
+
+export async function getConversaciones(req, res) {
+  try {
+    const userId = req.user._id;
+
+    const conversaciones = await Conversacion.find({
+      participantes: userId
+    })
+    .populate({
+      path: 'participantes',
+      match: { _id: { $ne: userId } },
+      select: 'nombre apellido username fotoPerfil'
+    })
+    .sort({ ultimaActividad: -1 })
+    .lean();
+
+    const resultado = conversaciones.map(conv => ({
+      _id: conv._id,
+      participante: conv.participantes.find(p => p !== null) ?? null,
+      ultimoMensaje: conv.ultimoMensaje ?? null,
+      ultimaActividad: conv.ultimaActividad || conv.updatedAt,
+    }));
+
+    res.json({ conversaciones: resultado });
+  } catch (error) {
+    console.error('Error al obtener conversaciones:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+}
