@@ -39,7 +39,11 @@ app.use('/api', socialRoutes)
 app.use('/api', mensajesRoutes)
 
 app.get('/', (req, res) => {
-    res.send("✅ Server On Vercel")
+    res.send({
+        mensaje: "Server On - Vercel",
+        aplicacion: "PoliRed Backend",
+        version: "1.0.0",
+    })
 })
 
 app.use((req, res) => {
