@@ -3,11 +3,11 @@ import { comprobarTokenPassword, crearNuevoPassword, recuperarPassword, login, p
 from '../controllers/SuperAdminController.js'
 import validators from '../validators/index.js'
 import validateResult from '../validators/validateResult.js'
-import { listarReportesUsuarios, listarReportesRedes, listarReportesApp, resolverReporteUsuario, resolverReporteRed, resolverReporteApp, listarSolicitudesVerificacion, resolverSolicitudVerificacion, listarSolicitudesRehabilitar, resolverSolicitudRehabilitar, deleteReporteUsuario, deleteReporteRed, deleteReporteApp } from '../controllers/reportesController.js'
-import { deleteSolicitudRehabilitar, deleteSolicitudHabilitarUsuario, deleteSolicitudVerificacion } from '../controllers/reportesController.js'
+import { listarReportesUsuarios, listarReportesRedes, listarReportesApp, resolverReporteUsuario, resolverReporteRed, resolverReporteApp, listarSolicitudesVerificacion, resolverSolicitudVerificacion, listarSolicitudesRehabilitar, resolverSolicitudRehabilitar, deleteReporteUsuario, deleteReporteRed, deleteReporteApp } from '../controllers/reportesSolicitudesController.js'
+import { deleteSolicitudRehabilitar, deleteSolicitudHabilitarUsuario, deleteSolicitudVerificacion } from '../controllers/reportesSolicitudesController.js'
 import { autenticarToken, isSuperAdmin } from '../middlewares/authSuperAdmin.js'
 import { verificarEstadoLogin } from '../middlewares/verificarLogin.js'
-import { listarSolicitudesHabilitarUsuarios, resolverSolicitudHabilitarUsuario } from '../controllers/reportesController.js'
+import { listarSolicitudesHabilitarUsuarios, resolverSolicitudHabilitarUsuario } from '../controllers/reportesSolicitudesController.js'
 
 const router = Router()
 

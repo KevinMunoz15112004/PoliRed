@@ -2,10 +2,10 @@ import {Router} from 'express'
 import { registroEstudiante, confirmarMailEstudiante, comprobarTokenPasswordEstudiante, recuperarPasswordEstudiante, crearNuevoPasswordEstudiante, perfilEstudiante, actualizarUsername, completarPerfil, actualizarPerfilEstudiante, actualizarPasswordEstudiante, crearPublicacion, unirseARedComunitaria, salirseDeRedComunitaria, listarRedesDelEstudiante, listarPublicacionesPorRed, listarPublicacionesGlobal, listarPublicacionesComunidades, obtenerRedesComunitarias, obtenerPerfilRed, publicarArticulo, listarArticulosPorRed, listarArticulosGlobal, listarArticulosComunidades, eliminarArticulo, eliminarPublicacion, obtenerEstudiantes, obtenerPerfilPublicoInfo, obtenerPerfilPublicoFeed } 
 from '../controllers/estudiantesController.js'
 import { requirePerfilCompleto, disallowPerfilCompleto } from '../middlewares/checkPerfilCompleto.js'
-import { verifyToken } from '../middlewares/auth.js'
+import { verifyToken, optionalVerifyToken } from '../middlewares/auth.js'
 import validators from '../validators/index.js'
 import validateResult from '../validators/validateResult.js'
-import { crearSolicitudHabilitarUsuario, listarMisSolicitudesHabilitar, deleteMiSolicitudHabilitar, listarMisReportesPublicacion, deleteMiReportePublicacion, listarMisReportesApp, deleteMiReporteApp, listarMisReportesUsuario, deleteMiReporteUsuario, crearReporteRed, listarMisReportesRed, deleteMiReporteRed } from '../controllers/reportesController.js'
+import { crearSolicitudHabilitarUsuario, crearReporteRed } from '../controllers/reportesSolicitudesController.js'
 
 const router = Router()
 
@@ -51,24 +51,11 @@ router.get('/perfil-publico/:usuarioId/info', verifyToken, validators.mongoIdPar
 router.get('/perfil-publico/:usuarioId/feed', verifyToken, validators.mongoIdParam('usuarioId'), validateResult, obtenerPerfilPublicoFeed)
 
 // Solicitud para que un estudiante suspendido pida ser habilitado
-router.post('/estudiantes/solicitud-habilitar', verifyToken, validators.rehabilitarUsuarioValidator, validateResult, crearSolicitudHabilitarUsuario)
-
-// Estudiante: ver/gestionar sus propias solicitudes de habilitar
-router.get('/estudiantes/solicitudes/habilitar', verifyToken, listarMisSolicitudesHabilitar)
-router.delete('/estudiantes/solicitudes/habilitar/:id', verifyToken, validators.mongoIdParam('id'), validateResult, deleteMiSolicitudHabilitar)
-
-// Estudiante: ver/gestionar sus propios reportes
-router.get('/estudiantes/reportes/publicacion', verifyToken, listarMisReportesPublicacion)
-router.delete('/estudiantes/reportes/publicacion/:id', verifyToken, validators.mongoIdParam('id'), validateResult, deleteMiReportePublicacion)
-router.get('/estudiantes/reportes/app', verifyToken, listarMisReportesApp)
-router.delete('/estudiantes/reportes/app/:id', verifyToken, validators.mongoIdParam('id'), validateResult, deleteMiReporteApp)
-router.get('/estudiantes/reportes/usuario', verifyToken, listarMisReportesUsuario)
-router.delete('/estudiantes/reportes/usuario/:id', verifyToken, validators.mongoIdParam('id'), validateResult, deleteMiReporteUsuario)
+// This route accepts requests with or without a token; when unauthenticated must provide email or username.
+router.post('/estudiantes/solicitud-habilitar', optionalVerifyToken, validators.rehabilitarUsuarioValidator, validateResult, crearSolicitudHabilitarUsuario)
 
 // Estudiante: reportes sobre redes
 router.post('/estudiantes/reportes/red', verifyToken, validators.mongoIdBody('redId'), validateResult, crearReporteRed)
-router.get('/estudiantes/reportes/red', verifyToken, listarMisReportesRed)
-router.delete('/estudiantes/reportes/red/:id', verifyToken, validators.mongoIdParam('id'), validateResult, deleteMiReporteRed)
 
 
 export default router

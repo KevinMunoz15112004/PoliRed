@@ -23,7 +23,7 @@ const crearPublicacionValidator = [
       return true
     }),
   body('tipoContenido')
-    .optional()
+    .exists().withMessage('tipoContenido es obligatorio').bail()
     .isIn(['texto', 'imagen']).withMessage('tipoContenido inválido. Valores permitidos: texto, imagen'),
   // Conditional checks depending on tipoContenido
   body()
@@ -35,6 +35,11 @@ const crearPublicacionValidator = [
         if ((req.body && req.body.mediaUrls) || (req.files && req.files.imagen)) throw new Error('No se permite media en publicaciones de tipo texto')
       } else {
         if (!req.body.contenido || !String(req.body.contenido).trim()) throw new Error('Contenido requerido para publicaciones con imagen')
+        // require at least one image: either uploaded file(s) under req.files.imagen or mediaUrls provided in body
+        const hasFiles = req.files && req.files.imagen
+        const media = req.body.mediaUrls
+        const hasMediaUrls = media && ((Array.isArray(media) && media.length > 0) || (typeof media === 'string' && String(media).trim() !== ''))
+        if (!hasFiles && !hasMediaUrls) throw new Error('Debes enviar al menos una imagen para publicaciones de tipo imagen')
       }
       return true
     })
@@ -71,7 +76,7 @@ const publicarArticuloValidator = [
       return true
     }),
   body('tipoContenido')
-    .optional()
+    .exists().withMessage('tipoContenido es obligatorio').bail()
     .isIn(['texto', 'imagen']).withMessage('tipoContenido inválido. Valores permitidos: texto, imagen'),
   body()
     .custom((_, { req }) => {
@@ -82,6 +87,10 @@ const publicarArticuloValidator = [
         if ((req.body && req.body.mediaUrls) || (req.files && req.files.imagen)) throw new Error('No se permite media en articulos de tipo texto')
       } else {
         if (!req.body.descripcion || !String(req.body.descripcion).trim()) throw new Error('Descripción requerida para articulos con imagen')
+        const hasFiles = req.files && req.files.imagen
+        const media = req.body.mediaUrls
+        const hasMediaUrls = media && ((Array.isArray(media) && media.length > 0) || (typeof media === 'string' && String(media).trim() !== ''))
+        if (!hasFiles && !hasMediaUrls) throw new Error('Debes enviar al menos una imagen para articulos de tipo imagen')
       }
       return true
     })

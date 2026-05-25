@@ -31,6 +31,33 @@ export async function verifyToken(req, res, next) {
   }
 }
 
+export async function optionalVerifyToken(req, res, next) {
+  const auth = req.headers.authorization
+  if (!auth || !auth.startsWith('Bearer ')) return next()
+  const token = auth.split(' ')[1]
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET)
+    const user = await Estudiante.findById(payload.id).select('-password').lean()
+    if (!user) return res.status(404).json({ msg: 'Usuario no encontrado' })
+    req.user = user
+    req.tokenPayload = payload
+    if (Array.isArray(user.roles) && user.roles.includes('admin_red')) {
+      try {
+        const relaciones = await AdminRed.find({ usuarioId: user._id }).lean()
+        req.adminRelations = relaciones
+        const activa = relaciones.find(r => r.estado === 'activo')
+        if (activa) req.user.redAsignada = activa.redId
+      } catch (e) {
+        console.error('Error cargando relaciones AdminRed:', e)
+        req.adminRelations = []
+      }
+    }
+    return next()
+  } catch (err) {
+    return res.status(401).json({ msg: 'Token inválido' })
+  }
+}
+
 export function requireRole(role) {
   return async (req, res, next) => {
     if (!req.user || !Array.isArray(req.user.roles) || !req.user.roles.includes(role)) {

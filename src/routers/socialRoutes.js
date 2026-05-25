@@ -23,7 +23,7 @@ import {
   listarLikesPublicacion,
 } from '../controllers/socialController.js'
 import { requirePerfilCompleto } from '../middlewares/checkPerfilCompleto.js'
-import { crearReportePublicacion, crearReporteApp, crearReporteUsuario, listarReportesAdminRed } from '../controllers/reportesController.js'
+import { crearReportePublicacion, crearReporteApp, crearReporteUsuario, listarReportesAdminRed } from '../controllers/reportesSolicitudesController.js'
 
 const router = Router()
 
