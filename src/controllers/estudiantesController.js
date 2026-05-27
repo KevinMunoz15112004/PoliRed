@@ -546,22 +546,11 @@ const crearPublicacion = async (req, res) => {
     const cat = String(categoria).trim().toLowerCase()
     const ctx = feedContext ? String(feedContext).trim().toLowerCase() : ''
 
-    if (ctx !== 'home' && ctx !== 'global') {
-      return res.status(400).json({ msg: 'feedContext explícito es obligatorio ("home" o "global")' })
-    }
-
     let targetComunidadId = comunidadId
     let redGlobal = null
 
-    // Validaciones estrictas según feedContext (Backend valida, NO infiere)
-    if (ctx === 'home') {
-      if (cat !== 'comunidad') return res.status(400).json({ msg: 'feedContext "home" requiere categoría "comunidad"' })
-      if (!targetComunidadId) return res.status(400).json({ msg: 'feedContext "home" requiere el id de una red comunitaria' })
-    } else if (ctx === 'global') {
-      if (!['noticias', 'venta', 'cursos'].includes(cat)) {
-        return res.status(400).json({ msg: 'feedContext "global" requiere categoría "noticias", "venta" o "cursos"' })
-      }
-      // Forzar target a red global
+    // Si es global, forzar target a la red global (lógica de negocio que requiere DB)
+    if (ctx === 'global') {
       redGlobal = await getGlobalRedDoc()
       if (!redGlobal) return res.status(500).json({ msg: 'No hay red global configurada' })
       targetComunidadId = redGlobal._id.toString()
@@ -781,14 +770,6 @@ const publicarArticulo = async (req, res) => {
     // `categoria` y campos relacionados son validados por `validators.publicarArticuloValidator` en las rutas
     const cat = String(categoria).trim().toLowerCase()
     const ctx = feedContext ? String(feedContext).trim().toLowerCase() : ''
-
-    if (ctx !== 'global') {
-      return res.status(400).json({ msg: 'Los artículos solo pueden publicarse en la red global (feedContext: "global")' })
-    }
-
-    if (!['venta', 'cursos'].includes(cat)) {
-      return res.status(400).json({ msg: 'Categoría inválida para artículos' })
-    }
 
     // `precio` validado por los validators; aquí se normaliza/convierte según la lógica de negocio
 

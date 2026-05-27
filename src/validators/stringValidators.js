@@ -1,5 +1,10 @@
 import { body } from 'express-validator'
 
+const MIN_NAME_LENGTH = 2
+const MAX_NAME_LENGTH = 50
+
+// Allow letters (incl. accents) and spaces only. Disallow numbers/special chars.
+// Also disallow the same letter repeated 3 or more times in a row (e.g., "Luiiiii").
 const nameRegex = /^(?!.*([A-Za-zÁÉÍÓÚáéíóúÑñ])\1{2,})[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$/
 
 const nameValidator = (field = 'nombre', { optional = false } = {}) => {
@@ -11,7 +16,9 @@ const nameValidator = (field = 'nombre', { optional = false } = {}) => {
     .trim()
     .notEmpty().withMessage(`${field} no puede estar vacío`)
     .bail()
-    .matches(nameRegex).withMessage(`${field} no debe contener letras repetidas excesivamente, caracteres especiales ni números`)
+    .isLength({ min: MIN_NAME_LENGTH, max: MAX_NAME_LENGTH }).withMessage(`${field} debe tener entre ${MIN_NAME_LENGTH} y ${MAX_NAME_LENGTH} caracteres`)
+    .bail()
+    .matches(nameRegex).withMessage(`${field} no debe contener números, caracteres especiales ni letras repetidas excesivamente`)
 }
 
 const usernameValidator = (field = 'username', { optional = false, min = 3, max = 30 } = {}) => {
