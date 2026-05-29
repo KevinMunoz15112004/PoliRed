@@ -3,6 +3,9 @@ import Estudiante from '../models/Estudiantes.js'
 import AdminRed from '../models/adminRedes.js'
 
 export async function verifyToken(req, res, next) {
+  console.log('VERIFY_TOKEN_DEBUG - authorization header:', req.headers.authorization ? 'present' : 'missing');
+  console.log('VERIFY_TOKEN_DEBUG - path:', req.path);
+
   const auth = req.headers.authorization
   if (!auth || !auth.startsWith('Bearer ')) return res.status(401).json({ msg: 'Token no proporcionado' })
   const token = auth.split(' ')[1]

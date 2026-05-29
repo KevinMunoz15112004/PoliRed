@@ -163,6 +163,9 @@ export async function markAsRead(req, res) {
 }
 
 export async function pusherAuth(req, res) {
+  console.log('PUSHER_AUTH_DEBUG - headers:', JSON.stringify(req.headers))
+  console.log('PUSHER_AUTH_DEBUG - body:', JSON.stringify(req.body))
+
   const { socket_id, channel_name } = req.body
   if (!socket_id || !channel_name) return res.status(400).json({ msg: 'socket_id y channel_name son requeridos' })
 
