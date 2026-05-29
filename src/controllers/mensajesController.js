@@ -163,13 +163,8 @@ export async function markAsRead(req, res) {
 }
 
 export async function pusherAuth(req, res) {
-  console.log('PUSHER_AUTH_DEBUG - headers:', JSON.stringify(req.headers))
-  console.log('PUSHER_AUTH_DEBUG - body:', JSON.stringify(req.body))
-
   const { socket_id, channel_name } = req.body
   if (!socket_id || !channel_name) return res.status(400).json({ msg: 'socket_id y channel_name son requeridos' })
-
-  console.log(`[PUSHER AUTH REQUEST] socket_id: ${socket_id}, channel_name: ${channel_name}`)
 
   try {
     // Restrict auth for user-specific private/presence channels
@@ -177,7 +172,6 @@ export async function pusherAuth(req, res) {
       const targetId = channel_name.replace('private-user-', '')
       if (targetId !== String(req.user._id)) return res.status(403).json({ msg: 'No autorizado para este canal' })
       const auth = pusher.authorizeChannel(socket_id, channel_name)
-      console.log(`[PUSHER AUTH RESPONSE]`, auth)
       return res.send(auth)
     }
 
@@ -193,7 +187,6 @@ export async function pusherAuth(req, res) {
         }
       }
       const auth = pusher.authorizeChannel(socket_id, channel_name, presenceData)
-      console.log(`[PUSHER AUTH RESPONSE]`, auth)
       return res.send(auth)
     }
 
@@ -207,12 +200,10 @@ export async function pusherAuth(req, res) {
         }
       }
       const auth = pusher.authorizeChannel(socket_id, channel_name, presenceData)
-      console.log(`[PUSHER AUTH RESPONSE]`, auth)
       return res.send(auth)
     }
 
     const auth = pusher.authorizeChannel(socket_id, channel_name)
-    console.log(`[PUSHER AUTH RESPONSE]`, auth)
     return res.send(auth)
   } catch (e) {
     console.error('Pusher auth error', e)

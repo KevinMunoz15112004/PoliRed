@@ -3,9 +3,7 @@ import Estudiante from '../models/Estudiantes.js'
 import AdminRed from '../models/adminRedes.js'
 
 export async function verifyToken(req, res, next) {
-  console.log('VERIFY_TOKEN_DEBUG - authorization header:', req.headers.authorization ? 'present' : 'missing');
-  console.log('VERIFY_TOKEN_DEBUG - path:', req.path);
-
+  
   let auth = req.headers.authorization
   
   // Fallback: leer token desde query params (para Pusher auth en Android)
