@@ -6,7 +6,17 @@ export async function verifyToken(req, res, next) {
   console.log('VERIFY_TOKEN_DEBUG - authorization header:', req.headers.authorization ? 'present' : 'missing');
   console.log('VERIFY_TOKEN_DEBUG - path:', req.path);
 
-  const auth = req.headers.authorization
+  let auth = req.headers.authorization
+  
+  // Fallback: leer token desde query params (para Pusher auth en Android)
+  if (!auth && req.query.token) {
+    auth = `Bearer ${req.query.token}`
+  }
+  // Fallback: leer token desde body (para Pusher auth)
+  if (!auth && req.body && req.body.token) {
+    auth = `Bearer ${req.body.token}`
+  }
+
   if (!auth || !auth.startsWith('Bearer ')) return res.status(401).json({ msg: 'Token no proporcionado' })
   const token = auth.split(' ')[1]
   try {
